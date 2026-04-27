@@ -36,7 +36,33 @@ const FIELD_LABELS = {
   weight: "Weight (kg)", volume: "Volume (m³)", e_booking_no: "E-Booking No",
   booking_no: "Booking No", pol: "POL", pod: "POD", carrier: "Carrier",
   etd: "ETD", qty_container: "QTY (Container)", eta: "ETA", vessel: "Vessel",
+  carrier_agent: "Agent",
 };
+
+// ─── Fobcargo Logo SVG ───
+const FobcargoLogo = ({ size = 30 }) => (
+  <svg width={size} height={size} viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#0ea5e9" />
+        <stop offset="100%" stopColor="#0369a1" />
+      </linearGradient>
+    </defs>
+    <rect width="120" height="120" rx="24" fill="url(#logoGrad)" />
+    {/* Container/ship icon */}
+    <rect x="20" y="55" width="80" height="35" rx="4" fill="rgba(255,255,255,0.95)" />
+    <rect x="25" y="60" width="23" height="12" rx="2" fill="#0ea5e9" opacity="0.6" />
+    <rect x="52" y="60" width="23" height="12" rx="2" fill="#0369a1" opacity="0.6" />
+    <rect x="25" y="74" width="23" height="12" rx="2" fill="#0369a1" opacity="0.6" />
+    <rect x="52" y="74" width="23" height="12" rx="2" fill="#0ea5e9" opacity="0.6" />
+    <rect x="79" y="60" width="16" height="26" rx="2" fill="#06b6d4" opacity="0.5" />
+    {/* Globe arc */}
+    <ellipse cx="60" cy="45" rx="30" ry="20" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="3" strokeDasharray="8 4" />
+    <circle cx="60" cy="30" r="4" fill="#fff" />
+    {/* Wave */}
+    <path d="M15 95 Q30 88 45 95 Q60 102 75 95 Q90 88 105 95" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" />
+  </svg>
+);
 
 // ─── Small Components ───
 const Badge = ({ value, small }) => {
@@ -85,16 +111,17 @@ const FilterDropdown = ({ label, value, options, onChange }) => {
 
 // ─── Excel Export ───
 function exportToExcel(data, filename) {
-  const headers = ["PO#", "Customer PO#", "Customer", "End Customer", "Supplier", "Description", "SKU",
-    "QTY Packages", "Weight", "Volume", "POL", "POD", "Carrier", "ETD", "ETA", "Vessel",
+  const headers = ["PO#", "Customer PO#", "Customer", "End Customer", "Supplier", "TUC/Description", "SKU",
+    "QTY Packages", "Weight", "Volume", "POL", "POD", "Carrier", "Agent", "ETD", "ETA", "Vessel",
     "Booking No", "Container", "QC Status", "Space Status", "Payment", "Telex Release", "Incoterms"];
   const rows = data.map(o => [
     o.po, o.customer_po, o.customer, o.end_customer, o.supplier, o.tuc, o.sku,
-    o.qty_packages, o.weight, o.volume, o.pol, o.pod, o.carrier, o.etd, o.eta, o.vessel,
-    o.booking_no, o.qty_container, o.qc_status, o.space_status, o.local_payment, o.telex_release, o.incoterms
+    o.qty_packages, o.weight, o.volume, o.pol, o.pod, o.carrier, o.carrier_agent || "",
+    o.etd, o.eta, o.vessel, o.booking_no, o.qty_container,
+    o.qc_status, o.space_status, o.local_payment, o.telex_release, o.incoterms
   ]);
 
-  let csv = "\uFEFF"; // BOM for Chinese support
+  let csv = "\uFEFF";
   csv += headers.join(",") + "\n";
   rows.forEach(row => {
     csv += row.map(cell => {
@@ -133,10 +160,8 @@ function LoginPage({ onLogin }) {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg, #0c1222 0%, #1a2332 50%, #0c1222 100%)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <div style={{ width: 380, padding: 40, background: "#fff", borderRadius: 16, boxShadow: "0 25px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: "linear-gradient(135deg, #0ea5e9, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "#fff", fontSize: 16, fontWeight: 800 }}>F</span>
-          </div>
-          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>FreightFlow</span>
+          <FobcargoLogo size={40} />
+          <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5, color: "#0f172a" }}>Fobcargo</span>
         </div>
         <div style={{ marginBottom: 20 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>Email</label>
@@ -167,11 +192,15 @@ function NewShipmentModal({ onClose, onSave, refData }) {
     telex_release: "Pending", incoterms: "FOB", crd_date: "", supplier: "",
     customer: "", end_customer: "", po: "", customer_po: "", supplier_order_no: "",
     tuc: "", sku: "", qty_packages: "", weight: "", volume: "",
-    e_booking_no: "", booking_no: "", pol: "", pod: "", carrier: "",
+    e_booking_no: "", booking_no: "", pol: "", pod: "", carrier: "", carrier_agent: "",
     etd: "", qty_container: "", eta: "", vessel: "",
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // Get agents for selected carrier
+  const selectedCarrierData = refData.carriersWithAgents?.find(c => c.name === form.carrier);
+  const agentOptions = selectedCarrierData?.agents || [];
 
   const handleSave = async () => {
     if (!form.po) { alert("PO# is required"); return; }
@@ -211,7 +240,7 @@ function NewShipmentModal({ onClose, onSave, refData }) {
           <div><label style={L}>Supplier</label><Sel field="supplier" options={refData.suppliers} /></div>
           <div><label style={L}>Customer</label><Sel field="customer" options={refData.customers} /></div>
           <div><label style={L}>End Customer</label><input value={form.end_customer} onChange={e => set("end_customer", e.target.value)} style={S} /></div>
-          <div style={{ gridColumn: "span 2" }}><label style={L}>Description (TUC)</label><input value={form.tuc} onChange={e => set("tuc", e.target.value)} style={S} /></div>
+          <div style={{ gridColumn: "span 2" }}><label style={L}>TUC / Description</label><input value={form.tuc} onChange={e => set("tuc", e.target.value)} style={S} /></div>
           <div><label style={L}>SKU</label><input value={form.sku} onChange={e => set("sku", e.target.value)} style={S} /></div>
           <div><label style={L}>QTY (Packages)</label><input type="number" value={form.qty_packages} onChange={e => set("qty_packages", e.target.value)} style={S} /></div>
           <div><label style={L}>Weight (kg)</label><input type="number" value={form.weight} onChange={e => set("weight", e.target.value)} style={S} /></div>
@@ -221,7 +250,24 @@ function NewShipmentModal({ onClose, onSave, refData }) {
           <div />
           <div><label style={L}>POL</label><Sel field="pol" options={refData.ports} /></div>
           <div><label style={L}>POD</label><Sel field="pod" options={refData.ports} /></div>
-          <div><label style={L}>Carrier</label><Sel field="carrier" options={refData.carriers} /></div>
+          <div>
+            <label style={L}>Carrier</label>
+            <select value={form.carrier} onChange={e => { set("carrier", e.target.value); set("carrier_agent", ""); }} style={{ ...S, cursor: "pointer" }}>
+              <option value="">Select...</option>
+              {refData.carriers.map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={L}>Agent</label>
+            {agentOptions.length > 0 ? (
+              <select value={form.carrier_agent} onChange={e => set("carrier_agent", e.target.value)} style={{ ...S, cursor: "pointer" }}>
+                <option value="">No agent</option>
+                {agentOptions.map(a => <option key={a}>{a}</option>)}
+              </select>
+            ) : (
+              <input value={form.carrier_agent} onChange={e => set("carrier_agent", e.target.value)} style={S} placeholder="e.g. Yusen" />
+            )}
+          </div>
           <div><label style={L}>E-Booking No</label><input value={form.e_booking_no} onChange={e => set("e_booking_no", e.target.value)} style={S} /></div>
           <div><label style={L}>Booking No</label><input value={form.booking_no} onChange={e => set("booking_no", e.target.value)} style={S} /></div>
           <div><label style={L}>QTY (Container)</label><input value={form.qty_container} onChange={e => set("qty_container", e.target.value)} style={S} /></div>
@@ -257,8 +303,6 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("created_at");
     setItems(data || []);
     setLoading(false);
-
-    // Check cross-container warnings
     if (data && data.length > 0) {
       const bookingNos = [...new Set(data.map(d => d.booking_no).filter(Boolean))];
       const warnings = [];
@@ -283,28 +327,21 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     const { error } = await supabase.from("loading_details").insert(clean);
     if (error) { alert(error.message); setSaving(false); return; }
     setForm({ booking_no: "", container_no: "", container_type: "40HQ", booked_packages: "", booked_weight: "", booked_volume: "", actual_packages: "", actual_weight: "", actual_volume: "", carton_size: "", notes: "" });
-    setSaving(false);
-    load();
-    onSaved?.();
+    setSaving(false); load(); onSaved?.();
   };
 
   const deleteItem = async (id) => {
     if (!confirm("Delete this loading record?")) return;
     await supabase.from("loading_details").delete().eq("id", id);
-    load();
-    onSaved?.();
+    load(); onSaved?.();
   };
 
   const S = { width: "100%", padding: "6px 8px", borderRadius: 5, border: "1px solid #e2e8f0", fontSize: 12, outline: "none", boxSizing: "border-box" };
   const L = { fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3, display: "block" };
 
-  // Compute totals
   const totals = useMemo(() => {
     const t = { bp: 0, bw: 0, bv: 0, ap: 0, aw: 0, av: 0 };
-    items.forEach(i => {
-      t.bp += i.booked_packages || 0; t.bw += i.booked_weight || 0; t.bv += i.booked_volume || 0;
-      t.ap += i.actual_packages || 0; t.aw += i.actual_weight || 0; t.av += i.actual_volume || 0;
-    });
+    items.forEach(i => { t.bp += i.booked_packages || 0; t.bw += i.booked_weight || 0; t.bv += i.booked_volume || 0; t.ap += i.actual_packages || 0; t.aw += i.actual_weight || 0; t.av += i.actual_volume || 0; });
     return t;
   }, [items]);
 
@@ -318,8 +355,6 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
           </div>
           <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#94a3b8" }}>✕</button>
         </div>
-
-        {/* Cross-container warnings */}
         {crossWarnings.length > 0 && (
           <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fef9c3", border: "1px solid #fde68a", marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e" }}>⚠ Cross-container alert</div>
@@ -330,14 +365,12 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
             ))}
           </div>
         )}
-
-        {/* Existing loading records */}
         {!loading && items.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 20, overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
-                  {["Booking No", "Container", "Type", "Booked Pkg", "Booked Wt", "Booked Vol", "Actual Pkg", "Actual Wt", "Actual Vol", "Carton", ""].map(h => (
+                  {["Booking No", "Container", "Type", "Bkd Pkg", "Bkd Wt", "Bkd Vol", "Act Pkg", "Act Wt", "Act Vol", "Carton", ""].map(h => (
                     <th key={h} style={{ padding: "8px 6px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
                   ))}
                 </tr>
@@ -355,17 +388,12 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
                     <td style={{ padding: "8px 6px", fontWeight: 600, color: item.actual_weight !== item.booked_weight ? "#dc2626" : "#059669" }}>{item.actual_weight ?? "—"}</td>
                     <td style={{ padding: "8px 6px", fontWeight: 600, color: item.actual_volume !== item.booked_volume ? "#dc2626" : "#059669" }}>{item.actual_volume ?? "—"}</td>
                     <td style={{ padding: "8px 6px", fontSize: 11 }}>{item.carton_size || "—"}</td>
-                    <td style={{ padding: "8px 6px" }}>
-                      <button onClick={() => deleteItem(item.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Del</button>
-                    </td>
+                    <td style={{ padding: "8px 6px" }}><button onClick={() => deleteItem(item.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Del</button></td>
                   </tr>
                 ))}
-                {/* Totals row */}
                 <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
                   <td style={{ padding: "8px 6px" }} colSpan={3}>TOTAL</td>
-                  <td style={{ padding: "8px 6px" }}>{totals.bp}</td>
-                  <td style={{ padding: "8px 6px" }}>{totals.bw}</td>
-                  <td style={{ padding: "8px 6px" }}>{totals.bv}</td>
+                  <td style={{ padding: "8px 6px" }}>{totals.bp}</td><td style={{ padding: "8px 6px" }}>{totals.bw}</td><td style={{ padding: "8px 6px" }}>{totals.bv}</td>
                   <td style={{ padding: "8px 6px", color: totals.ap !== totals.bp ? "#dc2626" : "#059669" }}>{totals.ap}</td>
                   <td style={{ padding: "8px 6px", color: totals.aw !== totals.bw ? "#dc2626" : "#059669" }}>{totals.aw}</td>
                   <td style={{ padding: "8px 6px", color: totals.av !== totals.bv ? "#dc2626" : "#059669" }}>{totals.av}</td>
@@ -375,8 +403,6 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
             </table>
           </div>
         )}
-
-        {/* Add new loading record */}
         <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#0f172a" }}>Add Loading Record</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
@@ -391,22 +417,113 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
             <div><label style={L}>Booked Pkg</label><input type="number" value={form.booked_packages} onChange={e => setForm(p => ({ ...p, booked_packages: e.target.value }))} style={S} /></div>
-            <div><label style={L}>Booked Wt (kg)</label><input type="number" value={form.booked_weight} onChange={e => setForm(p => ({ ...p, booked_weight: e.target.value }))} style={S} /></div>
-            <div><label style={L}>Booked Vol (m³)</label><input type="number" value={form.booked_volume} onChange={e => setForm(p => ({ ...p, booked_volume: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Booked Wt</label><input type="number" value={form.booked_weight} onChange={e => setForm(p => ({ ...p, booked_weight: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Booked Vol</label><input type="number" value={form.booked_volume} onChange={e => setForm(p => ({ ...p, booked_volume: e.target.value }))} style={S} /></div>
             <div><label style={L}>Actual Pkg</label><input type="number" value={form.actual_packages} onChange={e => setForm(p => ({ ...p, actual_packages: e.target.value }))} style={S} /></div>
-            <div><label style={L}>Actual Wt (kg)</label><input type="number" value={form.actual_weight} onChange={e => setForm(p => ({ ...p, actual_weight: e.target.value }))} style={S} /></div>
-            <div><label style={L}>Actual Vol (m³)</label><input type="number" value={form.actual_volume} onChange={e => setForm(p => ({ ...p, actual_volume: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Actual Wt</label><input type="number" value={form.actual_weight} onChange={e => setForm(p => ({ ...p, actual_weight: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Actual Vol</label><input type="number" value={form.actual_volume} onChange={e => setForm(p => ({ ...p, actual_volume: e.target.value }))} style={S} /></div>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <label style={L}>Notes</label>
-            <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={S} />
-          </div>
+          <div style={{ marginTop: 10 }}><label style={L}>Notes</label><input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={S} /></div>
           <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
             <button onClick={addItem} disabled={saving} style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: "#0ea5e9", color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
               {saving ? "Adding..." : "Add Record"}
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Carrier Management Modal (with Agents) ───
+function CarrierModal({ onClose }) {
+  const [items, setItems] = useState([]);
+  const [newName, setNewName] = useState("");
+  const [newAgent, setNewAgent] = useState("");
+  const [editingAgents, setEditingAgents] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("carriers").select("*").order("name");
+    setItems(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const addCarrier = async () => {
+    if (!newName.trim()) return;
+    const { error } = await supabase.from("carriers").insert({ name: newName.trim() });
+    if (error) { alert(error.message); return; }
+    setNewName(""); load();
+  };
+
+  const deleteCarrier = async (id) => {
+    if (!confirm("Delete this carrier?")) return;
+    await supabase.from("carriers").delete().eq("id", id);
+    load();
+  };
+
+  const addAgent = async (carrierId, currentAgents) => {
+    if (!newAgent.trim()) return;
+    const updated = [...(currentAgents || []), newAgent.trim()];
+    await supabase.from("carriers").update({ agents: updated }).eq("id", carrierId);
+    setNewAgent(""); load();
+  };
+
+  const removeAgent = async (carrierId, currentAgents, agentToRemove) => {
+    const updated = (currentAgents || []).filter(a => a !== agentToRemove);
+    await supabase.from("carriers").update({ agents: updated }).eq("id", carrierId);
+    load();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 500, maxHeight: "75vh", background: "#fff", borderRadius: 12, overflow: "auto", padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Manage Carriers & Agents</h2>
+          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#94a3b8" }}>✕</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Add new carrier..."
+            onKeyDown={e => e.key === "Enter" && addCarrier()}
+            style={{ flex: 1, padding: "8px 12px", borderRadius: 7, border: "1px solid #e2e8f0", fontSize: 13, outline: "none" }} />
+          <button onClick={addCarrier} style={{ padding: "8px 16px", borderRadius: 7, border: "none", background: "#0ea5e9", color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Add</button>
+        </div>
+        {loading ? <p style={{ color: "#94a3b8", fontSize: 13 }}>Loading...</p> : (
+          <div style={{ maxHeight: 400, overflowY: "auto" }}>
+            {items.map(item => (
+              <div key={item.id} style={{ padding: "10px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{item.name}</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setEditingAgents(editingAgents === item.id ? null : item.id)}
+                      style={{ border: "none", background: "none", color: "#0ea5e9", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                      {editingAgents === item.id ? "Hide agents" : `Agents (${(item.agents || []).length})`}
+                    </button>
+                    <button onClick={() => deleteCarrier(item.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Delete</button>
+                  </div>
+                </div>
+                {editingAgents === item.id && (
+                  <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: "2px solid #e2e8f0" }}>
+                    {(item.agents || []).map(agent => (
+                      <div key={agent} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                        <span style={{ fontSize: 12, color: "#475569" }}>{item.name}-{agent}</span>
+                        <button onClick={() => removeAgent(item.id, item.agents, agent)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer" }}>✕</button>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                      <input value={newAgent} onChange={e => setNewAgent(e.target.value)} placeholder="Agent name (e.g. Yusen)"
+                        onKeyDown={e => e.key === "Enter" && addAgent(item.id, item.agents)}
+                        style={{ flex: 1, padding: "5px 8px", borderRadius: 5, border: "1px solid #e2e8f0", fontSize: 12, outline: "none" }} />
+                      <button onClick={() => addAgent(item.id, item.agents)} style={{ padding: "5px 12px", borderRadius: 5, border: "none", background: "#10b981", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Add</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -478,10 +595,12 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", customer: "All" });
+  const [textFilters, setTextFilters] = useState({ booking_no: "", vessel: "", end_customer: "" });
   const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
   const [refDataModal, setRefDataModal] = useState(null);
-  const [refData, setRefData] = useState({ suppliers: [], customers: [], carriers: [], ports: [] });
+  const [showCarrierModal, setShowCarrierModal] = useState(false);
+  const [refData, setRefData] = useState({ suppliers: [], customers: [], carriers: [], carriersWithAgents: [], ports: [] });
   const [loadingDetailShipment, setLoadingDetailShipment] = useState(null);
 
   const isAdmin = user?.profile?.role === "admin";
@@ -491,13 +610,14 @@ export default function App() {
     const [s, cu, ca, p] = await Promise.all([
       supabase.from("suppliers").select("name").order("name"),
       supabase.from("customers").select("name").order("name"),
-      supabase.from("carriers").select("name").order("name"),
+      supabase.from("carriers").select("*").order("name"),
       supabase.from("ports").select("name,code").order("name"),
     ]);
     setRefData({
       suppliers: (s.data || []).map(x => x.name),
       customers: (cu.data || []).map(x => x.name),
       carriers: (ca.data || []).map(x => x.name),
+      carriersWithAgents: ca.data || [],
       ports: (p.data || []).map(x => `${x.name} (${x.code})`),
     });
   }, []);
@@ -535,32 +655,40 @@ export default function App() {
   };
 
   const setFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
-  const activeFilterCount = Object.values(filters).filter(v => v !== "All").length + (search ? 1 : 0);
-  const clearFilters = () => { setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", customer: "All" }); setSearch(""); };
+  const setTextFilter = (key, val) => setTextFilters(prev => ({ ...prev, [key]: val }));
+  const activeFilterCount = Object.values(filters).filter(v => v !== "All").length + Object.values(textFilters).filter(v => v).length + (search ? 1 : 0);
+  const clearFilters = () => {
+    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", customer: "All" });
+    setTextFilters({ booking_no: "", vessel: "", end_customer: "" });
+    setSearch("");
+  };
 
-  // Clickable overview stats
   const handleStatClick = (type) => {
     clearFilters();
     setView("orders");
     setSelectedId(null);
-    if (type === "qcPending") setFilters(prev => ({ ...prev, qc_status: "All" })); // We'll filter non-approved in filtered
     if (type === "paymentDue") setFilters(prev => ({ ...prev, local_payment: "Waiting" }));
     if (type === "telexPending") setFilters(prev => ({ ...prev, telex_release: "Pending" }));
   };
 
   const customerList = useMemo(() => [...new Set(shipments.map(o => o.customer).filter(Boolean))], [shipments]);
+  const endCustomerList = useMemo(() => [...new Set(shipments.map(o => o.end_customer).filter(Boolean))], [shipments]);
+  const vesselList = useMemo(() => [...new Set(shipments.map(o => o.vessel).filter(Boolean))], [shipments]);
 
   const filtered = useMemo(() => shipments.filter(o => {
     for (const key of Object.keys(STATUS_CONFIGS)) {
       if (filters[key] !== "All" && o[key] !== filters[key]) return false;
     }
     if (filters.customer !== "All" && o.customer !== filters.customer) return false;
+    if (textFilters.booking_no && !(o.booking_no || "").toLowerCase().includes(textFilters.booking_no.toLowerCase())) return false;
+    if (textFilters.vessel && !(o.vessel || "").toLowerCase().includes(textFilters.vessel.toLowerCase())) return false;
+    if (textFilters.end_customer && !(o.end_customer || "").toLowerCase().includes(textFilters.end_customer.toLowerCase())) return false;
     if (search) {
       const s = search.toLowerCase();
-      return [o.po, o.tuc, o.sku, o.carrier, o.customer_po, o.customer, o.supplier].some(v => (v || "").toLowerCase().includes(s));
+      return [o.po, o.tuc, o.sku, o.carrier, o.customer_po, o.customer, o.supplier, o.booking_no, o.vessel, o.qty_container].some(v => (v || "").toLowerCase().includes(s));
     }
     return true;
-  }), [shipments, filters, search]);
+  }), [shipments, filters, textFilters, search]);
 
   const orderLogs = useMemo(() => selectedOrder ? logs.filter(l => l.shipment_id === selectedOrder.id) : logs, [logs, selectedOrder]);
 
@@ -580,10 +708,8 @@ export default function App() {
       {/* Top Bar */}
       <div style={{ background: "#0c1222", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 6, background: "linear-gradient(135deg, #0ea5e9, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>F</span>
-          </div>
-          <span style={{ color: "#e2e8f0", fontSize: 15, fontWeight: 700, letterSpacing: -0.5 }}>FreightFlow</span>
+          <FobcargoLogo size={32} />
+          <span style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, letterSpacing: -0.3 }}>Fobcargo</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ color: "#94a3b8", fontSize: 12 }}>{user.email}</span>
@@ -607,12 +733,16 @@ export default function App() {
           {isAdmin && (
             <>
               <div style={{ margin: "14px 4px 6px", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Manage</div>
-              {[{ t: "suppliers", l: "Suppliers" }, { t: "customers", l: "Customers" }, { t: "carriers", l: "Carriers" }, { t: "ports", l: "Ports" }].map(item => (
+              {[{ t: "suppliers", l: "Suppliers" }, { t: "customers", l: "Customers" }, { t: "ports", l: "Ports" }].map(item => (
                 <button key={item.t} onClick={() => setRefDataModal(item)} style={{
                   display: "flex", alignItems: "center", gap: 9, padding: "7px 12px", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 500, width: "100%", textAlign: "left",
                   background: "transparent", color: "#94a3b8",
                 }}>⚙ {item.l}</button>
               ))}
+              <button onClick={() => setShowCarrierModal(true)} style={{
+                display: "flex", alignItems: "center", gap: 9, padding: "7px 12px", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 500, width: "100%", textAlign: "left",
+                background: "transparent", color: "#94a3b8",
+              }}>⚙ Carriers & Agents</button>
             </>
           )}
           <div style={{ margin: "14px 4px 6px", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Overview</div>
@@ -649,7 +779,7 @@ export default function App() {
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => exportToExcel(filtered, `FreightFlow_Export_${new Date().toISOString().slice(0, 10)}`)}
+                  <button onClick={() => exportToExcel(filtered, `Fobcargo_Export_${new Date().toISOString().slice(0, 10)}`)}
                     style={{ padding: "8px 16px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
                     ↓ Export CSV
                   </button>
@@ -657,51 +787,69 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Filter bar */}
               <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "12px 14px", marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Filters</span>
-                  <input placeholder="Search PO#, product, SKU, carrier..." value={search} onChange={e => setSearch(e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: search ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 200, outline: "none", background: search ? "#f0f9ff" : "#fff" }} />
+                  <input placeholder="Search PO#, product, SKU..." value={search} onChange={e => setSearch(e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: search ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 180, outline: "none", background: search ? "#f0f9ff" : "#fff" }} />
                   {Object.entries(STATUS_CONFIGS).map(([key, cfg]) => (
                     <FilterDropdown key={key} label={cfg.label} value={filters[key]} options={cfg.options} onChange={v => setFilter(key, v)} />
                   ))}
                   {isAdmin && <FilterDropdown label="Customer" value={filters.customer} options={customerList} onChange={v => setFilter("customer", v)} />}
-                  {activeFilterCount > 0 && <button onClick={clearFilters} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #fee2e2", background: "#fef2f2", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✕ Clear</button>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                  <input placeholder="Booking No..." value={textFilters.booking_no} onChange={e => setTextFilter("booking_no", e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: textFilters.booking_no ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 130, outline: "none", background: textFilters.booking_no ? "#f0f9ff" : "#fff" }} />
+                  <input placeholder="Vessel..." value={textFilters.vessel} onChange={e => setTextFilter("vessel", e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: textFilters.vessel ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 130, outline: "none", background: textFilters.vessel ? "#f0f9ff" : "#fff" }} />
+                  <input placeholder="End Customer..." value={textFilters.end_customer} onChange={e => setTextFilter("end_customer", e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: textFilters.end_customer ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 130, outline: "none", background: textFilters.end_customer ? "#f0f9ff" : "#fff" }} />
+                  {activeFilterCount > 0 && <button onClick={clearFilters} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #fee2e2", background: "#fef2f2", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✕ Clear all</button>}
                 </div>
               </div>
 
+              {/* Table - expanded columns */}
               <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 1100 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
                   <thead>
                     <tr style={{ background: "#f8fafc" }}>
-                      {["PO#", "Goods", "Customer", "Route", "ETD", "ETA", "QC", "Space", "Payment", "Telex"].map(h => (
-                        <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{h}</th>
+                      {["PO#", "Cust PO#", "TUC / Description", "Customer", "Route", "Carrier", "Booking", "Container", "Vessel", "ETD", "ETA", "QC", "Space", "Pay", "Telex"].map(h => (
+                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.length === 0 && <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>No shipments found</td></tr>}
+                    {filtered.length === 0 && <tr><td colSpan={15} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>No shipments found</td></tr>}
                     {filtered.map((o, i) => (
                       <tr key={o.id} onClick={() => setSelectedId(o.id)} style={{ cursor: "pointer", borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none" }}
                         onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                        <td style={{ padding: 12, fontWeight: 600, color: "#0ea5e9", fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{o.po || "—"}</td>
-                        <td style={{ padding: 12, maxWidth: 180 }}>
-                          <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.tuc || "—"}</div>
-                          <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'DM Mono', monospace" }}>{o.sku || ""}</div>
+                        <td style={{ padding: "10px 8px", fontWeight: 600, color: "#0ea5e9", fontFamily: "'DM Mono', monospace", fontSize: 11.5 }}>{o.po || "—"}</td>
+                        <td style={{ padding: "10px 8px", fontSize: 11, color: "#64748b", fontFamily: "'DM Mono', monospace" }}>{o.customer_po || "—"}</td>
+                        <td style={{ padding: "10px 8px", maxWidth: 160 }}>
+                          <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11.5 }}>{o.tuc || "—"}</div>
+                          {o.sku && <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'DM Mono', monospace" }}>{o.sku}</div>}
                         </td>
-                        <td style={{ padding: 12 }}>
-                          <div style={{ fontWeight: 500, fontSize: 12 }}>{o.customer || "—"}</div>
-                          {isAdmin && o.end_customer && <div style={{ fontSize: 11, color: "#94a3b8" }}>→ {o.end_customer}</div>}
+                        <td style={{ padding: "10px 8px" }}>
+                          <div style={{ fontWeight: 500, fontSize: 11.5 }}>{o.customer || "—"}</div>
+                          {isAdmin && o.end_customer && <div style={{ fontSize: 10, color: "#94a3b8" }}>→ {o.end_customer}</div>}
                         </td>
-                        <td style={{ padding: 12, fontSize: 11.5, whiteSpace: "nowrap" }}>
-                          {o.pol && o.pod ? <><span style={{ fontWeight: 500 }}>{(o.pol || "").split("(")[0].trim()}</span><span style={{ color: "#94a3b8", margin: "0 3px" }}>→</span><span style={{ fontWeight: 500 }}>{(o.pod || "").split("(")[0].trim()}</span></> : "—"}
+                        <td style={{ padding: "10px 8px", fontSize: 11, whiteSpace: "nowrap" }}>
+                          {o.pol && o.pod ? <><span style={{ fontWeight: 500 }}>{(o.pol || "").split("(")[0].trim()}</span><span style={{ color: "#94a3b8", margin: "0 2px" }}>→</span><span style={{ fontWeight: 500 }}>{(o.pod || "").split("(")[0].trim()}</span></> : "—"}
                         </td>
-                        <td style={{ padding: 12, fontFamily: "'DM Mono', monospace", fontSize: 11.5 }}>{o.etd || "—"}</td>
-                        <td style={{ padding: 12, fontFamily: "'DM Mono', monospace", fontSize: 11.5 }}>{o.eta || "—"}</td>
-                        <td style={{ padding: 12 }}>{o.qc_status ? <Badge value={o.qc_status} small /> : "—"}</td>
-                        <td style={{ padding: 12 }}>{o.space_status ? <Badge value={o.space_status} small /> : "—"}</td>
-                        <td style={{ padding: 12 }}>{o.local_payment ? <Badge value={o.local_payment} small /> : "—"}</td>
-                        <td style={{ padding: 12 }}>{o.telex_release ? <Badge value={o.telex_release} small /> : "—"}</td>
+                        <td style={{ padding: "10px 8px", fontSize: 11.5 }}>
+                          <div style={{ fontWeight: 500 }}>{o.carrier || "—"}</div>
+                          {o.carrier_agent && <div style={{ fontSize: 10, color: "#6366f1" }}>{o.carrier_agent}</div>}
+                        </td>
+                        <td style={{ padding: "10px 8px", fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#475569" }}>{o.booking_no || "—"}</td>
+                        <td style={{ padding: "10px 8px", fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#475569" }}>{o.qty_container || "—"}</td>
+                        <td style={{ padding: "10px 8px", fontSize: 11, color: "#475569", maxWidth: 120, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.vessel || "—"}</td>
+                        <td style={{ padding: "10px 8px", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{o.etd || "—"}</td>
+                        <td style={{ padding: "10px 8px", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{o.eta || "—"}</td>
+                        <td style={{ padding: "10px 8px" }}>{o.qc_status ? <Badge value={o.qc_status} small /> : "—"}</td>
+                        <td style={{ padding: "10px 8px" }}>{o.space_status ? <Badge value={o.space_status} small /> : "—"}</td>
+                        <td style={{ padding: "10px 8px" }}>{o.local_payment ? <Badge value={o.local_payment} small /> : "—"}</td>
+                        <td style={{ padding: "10px 8px" }}>{o.telex_release ? <Badge value={o.telex_release} small /> : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -761,7 +909,7 @@ export default function App() {
                 </div>
                 <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "1px solid #e2e8f0" }}>
                   <SectionHeader icon="📦" title="Cargo Details" accent="#f59e0b" />
-                  <Field label="Description (TUC)" value={selectedOrder.tuc} />
+                  <Field label="TUC / Description" value={selectedOrder.tuc} />
                   <Field label="SKU" value={selectedOrder.sku} />
                   <Field label="QTY (Packages)" value={selectedOrder.qty_packages} />
                   <Field label="Weight" value={selectedOrder.weight ? `${selectedOrder.weight} kg` : null} />
@@ -778,10 +926,11 @@ export default function App() {
                     <Field label="POL" value={selectedOrder.pol} />
                     <Field label="POD" value={selectedOrder.pod} />
                     <Field label="Carrier" value={selectedOrder.carrier} />
+                    <Field label="Agent" value={selectedOrder.carrier_agent} />
                     <Field label="QTY (Container)" value={selectedOrder.qty_container} />
+                    <Field label="Vessel" value={selectedOrder.vessel} />
                     <Field label="ETD" value={selectedOrder.etd} />
                     <Field label="ETA" value={selectedOrder.eta} />
-                    <Field label="Vessel" value={selectedOrder.vessel} />
                   </div>
                 </div>
                 <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "1px solid #e2e8f0" }}>
@@ -805,7 +954,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Loading Details Section */}
+              {/* Loading Details */}
               <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "2px solid #f59e0b" }}>
                 <SectionHeader icon="📋" title="Loading Details" accent="#f59e0b"
                   right={isAdmin && (
@@ -856,6 +1005,7 @@ export default function App() {
 
       {showNewModal && <NewShipmentModal onClose={() => setShowNewModal(false)} onSave={handleCreateShipment} refData={refData} />}
       {refDataModal && <RefDataModal table={refDataModal.t} title={refDataModal.l} onClose={() => { setRefDataModal(null); loadRefData(); }} />}
+      {showCarrierModal && <CarrierModal onClose={() => { setShowCarrierModal(false); loadRefData(); }} />}
       {loadingDetailShipment && <LoadingDetailModal shipment={loadingDetailShipment} onClose={() => setLoadingDetailShipment(null)} onSaved={loadShipments} />}
     </div>
   );
