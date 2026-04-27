@@ -56,19 +56,22 @@ const Field = ({ label, value }) => (
   </div>
 );
 
-const SectionHeader = ({ icon, title, accent }) => (
-  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 10, borderBottom: `2px solid ${accent || "#e2e8f0"}` }}>
-    <span style={{ fontSize: 15 }}>{icon}</span>
-    <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{title}</span>
+const SectionHeader = ({ icon, title, accent, right }) => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingBottom: 10, borderBottom: `2px solid ${accent || "#e2e8f0"}` }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontSize: 15 }}>{icon}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{title}</span>
+    </div>
+    {right}
   </div>
 );
 
-const FilterDropdown = ({ label, value, options, onChange, activeColor }) => {
+const FilterDropdown = ({ label, value, options, onChange }) => {
   const isActive = value !== "All";
   return (
     <select value={value} onChange={e => onChange(e.target.value)} style={{
       padding: "6px 28px 6px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500, outline: "none", cursor: "pointer",
-      border: isActive ? `2px solid ${activeColor || "#0ea5e9"}` : "1px solid #e2e8f0",
+      border: isActive ? "2px solid #0ea5e9" : "1px solid #e2e8f0",
       background: isActive ? "#f0f9ff" : "#fff", color: isActive ? "#0369a1" : "#64748b",
       appearance: "none",
       backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
@@ -79,6 +82,33 @@ const FilterDropdown = ({ label, value, options, onChange, activeColor }) => {
     </select>
   );
 };
+
+// ─── Excel Export ───
+function exportToExcel(data, filename) {
+  const headers = ["PO#", "Customer PO#", "Customer", "End Customer", "Supplier", "Description", "SKU",
+    "QTY Packages", "Weight", "Volume", "POL", "POD", "Carrier", "ETD", "ETA", "Vessel",
+    "Booking No", "Container", "QC Status", "Space Status", "Payment", "Telex Release", "Incoterms"];
+  const rows = data.map(o => [
+    o.po, o.customer_po, o.customer, o.end_customer, o.supplier, o.tuc, o.sku,
+    o.qty_packages, o.weight, o.volume, o.pol, o.pod, o.carrier, o.etd, o.eta, o.vessel,
+    o.booking_no, o.qty_container, o.qc_status, o.space_status, o.local_payment, o.telex_release, o.incoterms
+  ]);
+
+  let csv = "\uFEFF"; // BOM for Chinese support
+  csv += headers.join(",") + "\n";
+  rows.forEach(row => {
+    csv += row.map(cell => {
+      const str = (cell == null ? "" : String(cell));
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    }).join(",") + "\n";
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename + ".csv";
+  link.click();
+}
 
 // ─── Login Page ───
 function LoginPage({ onLogin }) {
@@ -210,6 +240,178 @@ function NewShipmentModal({ onClose, onSave, refData }) {
   );
 }
 
+// ─── Loading Detail Modal ───
+function LoadingDetailModal({ shipment, onClose, onSaved }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [crossWarnings, setCrossWarnings] = useState([]);
+  const [form, setForm] = useState({
+    booking_no: "", container_no: "", container_type: "40HQ",
+    booked_packages: "", booked_weight: "", booked_volume: "",
+    actual_packages: "", actual_weight: "", actual_volume: "",
+    carton_size: "", notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("created_at");
+    setItems(data || []);
+    setLoading(false);
+
+    // Check cross-container warnings
+    if (data && data.length > 0) {
+      const bookingNos = [...new Set(data.map(d => d.booking_no).filter(Boolean))];
+      const warnings = [];
+      for (const bn of bookingNos) {
+        const { data: others } = await supabase.from("loading_details").select("shipment_id").eq("booking_no", bn).neq("shipment_id", shipment.id);
+        if (others && others.length > 0) {
+          warnings.push({ booking_no: bn, count: others.length });
+        }
+      }
+      setCrossWarnings(warnings);
+    }
+  }, [shipment.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const addItem = async () => {
+    if (!form.booking_no && !form.container_no) { alert("Booking No or Container No is required"); return; }
+    setSaving(true);
+    const clean = { ...form, shipment_id: shipment.id };
+    ["booked_packages", "actual_packages"].forEach(k => { clean[k] = clean[k] ? parseInt(clean[k]) : null; });
+    ["booked_weight", "booked_volume", "actual_weight", "actual_volume"].forEach(k => { clean[k] = clean[k] ? parseFloat(clean[k]) : null; });
+    const { error } = await supabase.from("loading_details").insert(clean);
+    if (error) { alert(error.message); setSaving(false); return; }
+    setForm({ booking_no: "", container_no: "", container_type: "40HQ", booked_packages: "", booked_weight: "", booked_volume: "", actual_packages: "", actual_weight: "", actual_volume: "", carton_size: "", notes: "" });
+    setSaving(false);
+    load();
+    onSaved?.();
+  };
+
+  const deleteItem = async (id) => {
+    if (!confirm("Delete this loading record?")) return;
+    await supabase.from("loading_details").delete().eq("id", id);
+    load();
+    onSaved?.();
+  };
+
+  const S = { width: "100%", padding: "6px 8px", borderRadius: 5, border: "1px solid #e2e8f0", fontSize: 12, outline: "none", boxSizing: "border-box" };
+  const L = { fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3, display: "block" };
+
+  // Compute totals
+  const totals = useMemo(() => {
+    const t = { bp: 0, bw: 0, bv: 0, ap: 0, aw: 0, av: 0 };
+    items.forEach(i => {
+      t.bp += i.booked_packages || 0; t.bw += i.booked_weight || 0; t.bv += i.booked_volume || 0;
+      t.ap += i.actual_packages || 0; t.aw += i.actual_weight || 0; t.av += i.actual_volume || 0;
+    });
+    return t;
+  }, [items]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 800, maxHeight: "85vh", background: "#fff", borderRadius: 12, overflow: "auto", padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Loading Details — {shipment.po}</h2>
+            <p style={{ fontSize: 12, color: "#64748b", margin: "3px 0 0" }}>{shipment.tuc || ""}</p>
+          </div>
+          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#94a3b8" }}>✕</button>
+        </div>
+
+        {/* Cross-container warnings */}
+        {crossWarnings.length > 0 && (
+          <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fef9c3", border: "1px solid #fde68a", marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e" }}>⚠ Cross-container alert</div>
+            {crossWarnings.map(w => (
+              <div key={w.booking_no} style={{ fontSize: 12, color: "#92400e", marginTop: 4 }}>
+                Booking <strong>{w.booking_no}</strong> is also used by {w.count} other PO(s)
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Existing loading records */}
+        {!loading && items.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["Booking No", "Container", "Type", "Booked Pkg", "Booked Wt", "Booked Vol", "Actual Pkg", "Actual Wt", "Actual Vol", "Carton", ""].map(h => (
+                    <th key={h} style={{ padding: "8px 6px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600, color: "#0ea5e9" }}>{item.booking_no || "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{item.container_no || "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{item.container_type || "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{item.booked_packages ?? "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{item.booked_weight ?? "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{item.booked_volume ?? "—"}</td>
+                    <td style={{ padding: "8px 6px", fontWeight: 600, color: item.actual_packages !== item.booked_packages ? "#dc2626" : "#059669" }}>{item.actual_packages ?? "—"}</td>
+                    <td style={{ padding: "8px 6px", fontWeight: 600, color: item.actual_weight !== item.booked_weight ? "#dc2626" : "#059669" }}>{item.actual_weight ?? "—"}</td>
+                    <td style={{ padding: "8px 6px", fontWeight: 600, color: item.actual_volume !== item.booked_volume ? "#dc2626" : "#059669" }}>{item.actual_volume ?? "—"}</td>
+                    <td style={{ padding: "8px 6px", fontSize: 11 }}>{item.carton_size || "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>
+                      <button onClick={() => deleteItem(item.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Del</button>
+                    </td>
+                  </tr>
+                ))}
+                {/* Totals row */}
+                <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
+                  <td style={{ padding: "8px 6px" }} colSpan={3}>TOTAL</td>
+                  <td style={{ padding: "8px 6px" }}>{totals.bp}</td>
+                  <td style={{ padding: "8px 6px" }}>{totals.bw}</td>
+                  <td style={{ padding: "8px 6px" }}>{totals.bv}</td>
+                  <td style={{ padding: "8px 6px", color: totals.ap !== totals.bp ? "#dc2626" : "#059669" }}>{totals.ap}</td>
+                  <td style={{ padding: "8px 6px", color: totals.aw !== totals.bw ? "#dc2626" : "#059669" }}>{totals.aw}</td>
+                  <td style={{ padding: "8px 6px", color: totals.av !== totals.bv ? "#dc2626" : "#059669" }}>{totals.av}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Add new loading record */}
+        <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#0f172a" }}>Add Loading Record</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            <div><label style={L}>Booking No</label><input value={form.booking_no} onChange={e => setForm(p => ({ ...p, booking_no: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Container No</label><input value={form.container_no} onChange={e => setForm(p => ({ ...p, container_no: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Container Type</label>
+              <select value={form.container_type} onChange={e => setForm(p => ({ ...p, container_type: e.target.value }))} style={{ ...S, cursor: "pointer" }}>
+                {["20GP", "40GP", "40HQ", "45HQ", "20OT", "40OT", "20FR", "40FR"].map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div><label style={L}>Carton Size</label><input value={form.carton_size} onChange={e => setForm(p => ({ ...p, carton_size: e.target.value }))} style={S} placeholder="e.g. 60x40x30cm" /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+            <div><label style={L}>Booked Pkg</label><input type="number" value={form.booked_packages} onChange={e => setForm(p => ({ ...p, booked_packages: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Booked Wt (kg)</label><input type="number" value={form.booked_weight} onChange={e => setForm(p => ({ ...p, booked_weight: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Booked Vol (m³)</label><input type="number" value={form.booked_volume} onChange={e => setForm(p => ({ ...p, booked_volume: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Actual Pkg</label><input type="number" value={form.actual_packages} onChange={e => setForm(p => ({ ...p, actual_packages: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Actual Wt (kg)</label><input type="number" value={form.actual_weight} onChange={e => setForm(p => ({ ...p, actual_weight: e.target.value }))} style={S} /></div>
+            <div><label style={L}>Actual Vol (m³)</label><input type="number" value={form.actual_volume} onChange={e => setForm(p => ({ ...p, actual_volume: e.target.value }))} style={S} /></div>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <label style={L}>Notes</label>
+            <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={S} />
+          </div>
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={addItem} disabled={saving} style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: "#0ea5e9", color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
+              {saving ? "Adding..." : "Add Record"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Ref Data Management Modal ───
 function RefDataModal({ table, title, onClose }) {
   const [items, setItems] = useState([]);
@@ -280,6 +482,7 @@ export default function App() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [refDataModal, setRefDataModal] = useState(null);
   const [refData, setRefData] = useState({ suppliers: [], customers: [], carriers: [], ports: [] });
+  const [loadingDetailShipment, setLoadingDetailShipment] = useState(null);
 
   const isAdmin = user?.profile?.role === "admin";
   const selectedOrder = shipments.find(o => o.id === selectedId);
@@ -334,6 +537,16 @@ export default function App() {
   const setFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
   const activeFilterCount = Object.values(filters).filter(v => v !== "All").length + (search ? 1 : 0);
   const clearFilters = () => { setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", customer: "All" }); setSearch(""); };
+
+  // Clickable overview stats
+  const handleStatClick = (type) => {
+    clearFilters();
+    setView("orders");
+    setSelectedId(null);
+    if (type === "qcPending") setFilters(prev => ({ ...prev, qc_status: "All" })); // We'll filter non-approved in filtered
+    if (type === "paymentDue") setFilters(prev => ({ ...prev, local_payment: "Waiting" }));
+    if (type === "telexPending") setFilters(prev => ({ ...prev, telex_release: "Pending" }));
+  };
 
   const customerList = useMemo(() => [...new Set(shipments.map(o => o.customer).filter(Boolean))], [shipments]);
 
@@ -404,8 +617,15 @@ export default function App() {
           )}
           <div style={{ margin: "14px 4px 6px", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Overview</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "0 4px" }}>
-            {[{ l: "Total", v: stats.total, c: "#0ea5e9" }, { l: "QC Pending", v: stats.qcPending, c: "#f59e0b" }, { l: "Payment Due", v: stats.paymentDue, c: "#ef4444" }, { l: "Telex Pending", v: stats.telexPending, c: "#8b5cf6" }].map(s => (
-              <div key={s.l} style={{ padding: "8px 10px", borderRadius: 7, background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {[
+              { l: "Total", v: stats.total, c: "#0ea5e9", click: () => { clearFilters(); setView("orders"); setSelectedId(null); } },
+              { l: "QC Pending", v: stats.qcPending, c: "#f59e0b", click: () => handleStatClick("qcPending") },
+              { l: "Payment Due", v: stats.paymentDue, c: "#ef4444", click: () => handleStatClick("paymentDue") },
+              { l: "Telex Pending", v: stats.telexPending, c: "#8b5cf6", click: () => handleStatClick("telexPending") },
+            ].map(s => (
+              <div key={s.l} onClick={s.click} style={{ padding: "8px 10px", borderRadius: 7, background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.1s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#e0f2fe"}
+                onMouseLeave={e => e.currentTarget.style.background = "#f8fafc"}>
                 <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{s.l}</span>
                 <span style={{ fontSize: 18, fontWeight: 700, color: s.c, fontFamily: "'DM Mono', monospace" }}>{s.v}</span>
               </div>
@@ -428,7 +648,13 @@ export default function App() {
                     {activeFilterCount > 0 && <span style={{ color: "#0ea5e9", fontWeight: 600 }}> · {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active</span>}
                   </p>
                 </div>
-                {isAdmin && <button onClick={() => setShowNewModal(true)} style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: "#0ea5e9", color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>+ New Shipment</button>}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => exportToExcel(filtered, `FreightFlow_Export_${new Date().toISOString().slice(0, 10)}`)}
+                    style={{ padding: "8px 16px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                    ↓ Export CSV
+                  </button>
+                  {isAdmin && <button onClick={() => setShowNewModal(true)} style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: "#0ea5e9", color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>+ New Shipment</button>}
+                </div>
               </div>
 
               <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "12px 14px", marginBottom: 14 }}>
@@ -439,7 +665,7 @@ export default function App() {
                   {Object.entries(STATUS_CONFIGS).map(([key, cfg]) => (
                     <FilterDropdown key={key} label={cfg.label} value={filters[key]} options={cfg.options} onChange={v => setFilter(key, v)} />
                   ))}
-                  {isAdmin && <FilterDropdown label="Customer" value={filters.customer} options={customerList} onChange={v => setFilter("customer", v)} activeColor="#f59e0b" />}
+                  {isAdmin && <FilterDropdown label="Customer" value={filters.customer} options={customerList} onChange={v => setFilter("customer", v)} />}
                   {activeFilterCount > 0 && <button onClick={clearFilters} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #fee2e2", background: "#fef2f2", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✕ Clear</button>}
                 </div>
               </div>
@@ -543,7 +769,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
                 <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "1px solid #e2e8f0" }}>
                   <SectionHeader icon="🚢" title="Shipping Details" accent="#6366f1" />
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
@@ -577,6 +803,18 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Loading Details Section */}
+              <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "2px solid #f59e0b" }}>
+                <SectionHeader icon="📋" title="Loading Details" accent="#f59e0b"
+                  right={isAdmin && (
+                    <button onClick={() => setLoadingDetailShipment(selectedOrder)}
+                      style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#f59e0b", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      + Manage Loading
+                    </button>
+                  )} />
+                <p style={{ fontSize: 12, color: "#94a3b8" }}>Click "Manage Loading" to add or view loading records for this PO.</p>
               </div>
             </>
           )}
@@ -618,6 +856,7 @@ export default function App() {
 
       {showNewModal && <NewShipmentModal onClose={() => setShowNewModal(false)} onSave={handleCreateShipment} refData={refData} />}
       {refDataModal && <RefDataModal table={refDataModal.t} title={refDataModal.l} onClose={() => { setRefDataModal(null); loadRefData(); }} />}
+      {loadingDetailShipment && <LoadingDetailModal shipment={loadingDetailShipment} onClose={() => setLoadingDetailShipment(null)} onSaved={loadShipments} />}
     </div>
   );
 }
