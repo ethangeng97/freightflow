@@ -184,7 +184,7 @@ function NewShipmentModal({ onClose, onSave, refData }) {
           <div><label style={L}>Supplier Order No#</label><input value={form.supplier_order_no} onChange={e => set("supplier_order_no",e.target.value)} style={S} /></div>
           <div><label style={L}>Supplier</label><Sel field="supplier" options={refData.suppliers} /></div>
           <div><label style={L}>Customer</label><Sel field="customer" options={refData.customers} /></div>
-          <div><label style={L}>End Customer</label><input value={form.end_customer} onChange={e => set("end_customer",e.target.value)} style={S} /></div>
+          <div><label style={L}>End Customer</label><Sel field="end_customer" options={refData.endCustomers} /></div>
           <div style={{gridColumn:"span 2"}}><label style={L}>TUC / Description</label><input value={form.tuc} onChange={e => set("tuc",e.target.value)} style={S} /></div>
           <div><label style={L}>SKU</label><input value={form.sku} onChange={e => set("sku",e.target.value)} style={S} /></div>
           <div><label style={L}>QTY (Packages)</label><input type="number" value={form.qty_packages} onChange={e => set("qty_packages",e.target.value)} style={S} /></div>
@@ -355,15 +355,15 @@ export default function App() {
   const [refDataModal, setRefDataModal] = useState(null);
   const [showCarrierModal, setShowCarrierModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [refData, setRefData] = useState({ suppliers:[],customers:[],carriers:[],carriersWithAgents:[],ports:[] });
+  const [refData, setRefData] = useState({ suppliers:[],customers:[],carriers:[],carriersWithAgents:[],ports:[],endCustomers:[] });
   const [loadingDetailShipment, setLoadingDetailShipment] = useState(null);
 
   const isAdmin = user?.profile?.role === "admin";
   const selectedOrder = shipments.find(o => o.id === selectedId);
 
   const loadRefData = useCallback(async () => {
-    const [s,cu,ca,p] = await Promise.all([supabase.from("suppliers").select("*").order("name"),supabase.from("customers").select("name").order("name"),supabase.from("carriers").select("*").order("name"),supabase.from("ports").select("name,code").order("name")]);
-    setRefData({ suppliers:(s.data||[]).map(x=>x.name), suppliersRaw:s.data||[], customers:(cu.data||[]).map(x=>x.name), carriers:(ca.data||[]).map(x=>x.name), carriersWithAgents:ca.data||[], ports:(p.data||[]).map(x=>`${x.name} (${x.code})`) });
+    const [s,cu,ca,p,ec] = await Promise.all([supabase.from("suppliers").select("*").order("name"),supabase.from("customers").select("name").order("name"),supabase.from("carriers").select("*").order("name"),supabase.from("ports").select("name,code").order("name"),supabase.from("end_customers").select("name").order("name")]);
+    setRefData({ suppliers:(s.data||[]).map(x=>x.name), suppliersRaw:s.data||[], customers:(cu.data||[]).map(x=>x.name), carriers:(ca.data||[]).map(x=>x.name), carriersWithAgents:ca.data||[], ports:(p.data||[]).map(x=>`${x.name} (${x.code})`), endCustomers:(ec.data||[]).map(x=>x.name) });
   }, []);
   const loadShipments = useCallback(async () => { const { data } = await supabase.from("shipments").select("*").order("created_at",{ascending:false}); setShipments(data||[]); setLoading(false); }, []);
   const loadLogs = useCallback(async () => { const { data } = await supabase.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(200); setLogs(data||[]); }, []);
@@ -417,7 +417,7 @@ export default function App() {
           {isAdmin&&<>
             <div style={{ margin:"14px 4px 6px",fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1 }}>Manage</div>
             <button onClick={()=>setShowSupplierModal(true)} style={{ display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:500,width:"100%",textAlign:"left",background:"transparent",color:"#94a3b8" }}>⚙ Suppliers</button>
-            {[{t:"customers",l:"Customers"},{t:"ports",l:"Ports"}].map(item=><button key={item.t} onClick={()=>setRefDataModal(item)} style={{ display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:500,width:"100%",textAlign:"left",background:"transparent",color:"#94a3b8" }}>⚙ {item.l}</button>)}
+            {[{t:"customers",l:"Customers"},{t:"end_customers",l:"End Customers"},{t:"ports",l:"Ports"}].map(item=><button key={item.t} onClick={()=>setRefDataModal(item)} style={{ display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:500,width:"100%",textAlign:"left",background:"transparent",color:"#94a3b8" }}>⚙ {item.l}</button>)}
             <button onClick={()=>setShowCarrierModal(true)} style={{ display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:500,width:"100%",textAlign:"left",background:"transparent",color:"#94a3b8" }}>⚙ Carriers & Agents</button>
           </>}
           <div style={{ margin:"14px 4px 6px",fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1 }}>Overview</div>
