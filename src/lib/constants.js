@@ -1,0 +1,44 @@
+export const STATUS_CONFIGS = {
+  qc_status:     { label: "QC Status",     options: ["QC Approved", "QC Reject", "Loading First", "Waiting QC Report", "Under Review"] },
+  space_status:  { label: "Space Status",  options: ["Booked", "Released", "Wait Info"] },
+  local_payment: { label: "Payment",       options: ["Reject", "Waiting", "Paid"] },
+  telex_release: { label: "Telex Release", options: ["Pending", "Released"] },
+  incoterms:     { label: "Incoterms",     options: ["FOB", "DDP"] },
+  bl_status:     { label: "B/L Status",    options: ["Not Ready", "Done"] },
+};
+
+export const STATUS_COLORS = {
+  "QC Approved": { bg: "#dcfce7", color: "#166534", dot: "#22c55e" },
+  "QC Reject":   { bg: "#fee2e2", color: "#991b1b", dot: "#ef4444" },
+  "Loading First": { bg: "#fef9c3", color: "#854d0e", dot: "#eab308" },
+  "Waiting QC Report": { bg: "#fff7ed", color: "#9a3412", dot: "#f97316" },
+  "Under Review": { bg: "#e0e7ff", color: "#3730a3", dot: "#6366f1" },
+  Booked:    { bg: "#dcfce7", color: "#166534", dot: "#22c55e" },
+  Released:  { bg: "#dbeafe", color: "#1e40af", dot: "#3b82f6" },
+  "Wait Info": { bg: "#fef9c3", color: "#854d0e", dot: "#eab308" },
+  Reject:    { bg: "#fee2e2", color: "#991b1b", dot: "#ef4444" },
+  Waiting:   { bg: "#fff7ed", color: "#9a3412", dot: "#f97316" },
+  Paid:      { bg: "#dcfce7", color: "#166534", dot: "#22c55e" },
+  Pending:   { bg: "#fff7ed", color: "#9a3412", dot: "#f97316" },
+  FOB:       { bg: "#f0f9ff", color: "#075985", dot: "#0ea5e9" },
+  DDP:       { bg: "#fdf4ff", color: "#86198f", dot: "#d946ef" },
+  "Not Ready": { bg: "#fff7ed", color: "#9a3412", dot: "#f97316" },
+  Done:      { bg: "#dcfce7", color: "#166534", dot: "#22c55e" },
+  draft:     { bg: "#f1f5f9", color: "#475569", dot: "#94a3b8" },
+  sent:      { bg: "#dbeafe", color: "#1e40af", dot: "#3b82f6" },
+  accepted:  { bg: "#dcfce7", color: "#166534", dot: "#22c55e" },
+  rejected:  { bg: "#fee2e2", color: "#991b1b", dot: "#ef4444" },
+  expired:   { bg: "#f5f5f4", color: "#57534e", dot: "#a8a29e" },
+};
+
+export const FIELD_LABELS = {
+  qc_status: "QC Status", space_status: "Space Status", local_payment: "Local Payment",
+  telex_release: "Telex Release", incoterms: "Incoterms", crd_date: "CRD Date",
+  supplier: "Supplier", customer: "Customer", end_customer: "End Customer",
+  po: "PO#", customer_po: "Customer PO#", supplier_order_no: "Supplier Order No#",
+  tuc: "Description (TUC)", sku: "SKU", qty_packages: "QTY (Packages)",
+  weight: "Weight (kg)", volume: "Volume (m³)", e_booking_no: "E-Booking No",
+  booking_no: "Booking No", pol: "POL", pod: "POD", carrier: "Carrier",
+  etd: "ETD", qty_container: "QTY (Container)", eta: "ETA", vessel: "Vessel",
+  carrier_agent: "Agent", container_no: "Container No", bl_status: "B/L Status",
+};
