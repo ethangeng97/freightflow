@@ -232,6 +232,22 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     }
   }, [shipment.id]);
   useEffect(() => { load(); }, [load]);
+
+  const syncToShipment = async () => {
+    const { data: ld } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("created_at");
+    if (!ld || ld.length === 0) return;
+    const bookings = [...new Set(ld.map(d => d.booking_no).filter(Boolean))].join(", ");
+    const containers = [...new Set(ld.map(d => d.container_no).filter(Boolean))].join(", ");
+    const typeCount = {};
+    ld.forEach(d => { if (d.container_type) typeCount[d.container_type] = (typeCount[d.container_type]||0)+1; });
+    const qtyStr = Object.entries(typeCount).map(([t,c]) => `${c}x${t}`).join(", ");
+    const updates = {};
+    if (bookings) updates.booking_no = bookings;
+    if (containers) updates.container_no = containers;
+    if (qtyStr) updates.qty_container = qtyStr;
+    if (Object.keys(updates).length > 0) await supabase.from("shipments").update(updates).eq("id", shipment.id);
+  };
+
   const addItem = async () => {
     if (!form.booking_no && !form.container_no) { alert("Booking No or Container No required"); return; }
     setSaving(true);
@@ -241,9 +257,9 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     const { error } = await supabase.from("loading_details").insert(c);
     if (error) { alert(error.message); setSaving(false); return; }
     setForm({ booking_no:"",container_no:"",container_type:"40HQ",booked_packages:"",booked_weight:"",booked_volume:"",actual_packages:"",actual_weight:"",actual_volume:"",carton_size:"",notes:"" });
-    setSaving(false); load(); onSaved?.();
+    setSaving(false); load(); await syncToShipment(); onSaved?.();
   };
-  const deleteItem = async (id) => { if (!confirm("Delete?")) return; await supabase.from("loading_details").delete().eq("id",id); load(); onSaved?.(); };
+  const deleteItem = async (id) => { if (!confirm("Delete?")) return; await supabase.from("loading_details").delete().eq("id",id); load(); await syncToShipment(); onSaved?.(); };
   const S = { width:"100%",padding:"6px 8px",borderRadius:5,border:"1px solid #e2e8f0",fontSize:12,outline:"none",boxSizing:"border-box" };
   const L = { fontSize:10,fontWeight:600,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3,display:"block" };
   const totals = useMemo(() => { const t={bp:0,bw:0,bv:0,ap:0,aw:0,av:0}; items.forEach(i=>{t.bp+=i.booked_packages||0;t.bw+=i.booked_weight||0;t.bv+=i.booked_volume||0;t.ap+=i.actual_packages||0;t.aw+=i.actual_weight||0;t.av+=i.actual_volume||0;}); return t; }, [items]);
@@ -357,6 +373,7 @@ export default function App() {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [refData, setRefData] = useState({ suppliers:[],customers:[],carriers:[],carriersWithAgents:[],ports:[],endCustomers:[] });
   const [loadingDetailShipment, setLoadingDetailShipment] = useState(null);
+  const [checkedIds, setCheckedIds] = useState(new Set());
 
   const isAdmin = user?.profile?.role === "admin";
   const selectedOrder = shipments.find(o => o.id === selectedId);
@@ -371,6 +388,33 @@ export default function App() {
 
   const handleCreateShipment = async (form) => { form.created_by=user.id; const { error } = await supabase.from("shipments").insert(form); if (error) {alert(error.message);return;} setShowNewModal(false); loadShipments(); };
   const handleUpdateField = async (sid,field,oldV,newV) => { if (oldV===newV) return; const { error } = await supabase.from("shipments").update({[field]:newV}).eq("id",sid); if (error) {alert(error.message);return;} await supabase.from("audit_logs").insert({shipment_id:sid,user_id:user.id,user_email:user.email,field_name:FIELD_LABELS[field]||field,old_value:oldV||"",new_value:newV||""}); loadShipments(); loadLogs(); };
+
+  const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleCheckAll = () => { if (checkedIds.size === filtered.length) setCheckedIds(new Set()); else setCheckedIds(new Set(filtered.map(o=>o.id))); };
+  const handleBatchDelete = async () => {
+    if (checkedIds.size === 0) return;
+    if (!confirm(`Delete ${checkedIds.size} shipment(s)? This cannot be undone.`)) return;
+    for (const id of checkedIds) {
+      await supabase.from("audit_logs").delete().eq("shipment_id", id);
+      await supabase.from("loading_details").delete().eq("shipment_id", id);
+      await supabase.from("shipments").delete().eq("id", id);
+    }
+    setCheckedIds(new Set()); loadShipments(); loadLogs();
+  };
+  const handleBatchDuplicate = async () => {
+    if (checkedIds.size === 0) return;
+    if (!confirm(`Duplicate ${checkedIds.size} shipment(s)?`)) return;
+    for (const id of checkedIds) {
+      const orig = shipments.find(s => s.id === id);
+      if (!orig) continue;
+      const copy = { ...orig };
+      delete copy.id; delete copy.created_at; delete copy.updated_at;
+      copy.po = (copy.po || "") + " (COPY)";
+      copy.created_by = user.id;
+      await supabase.from("shipments").insert(copy);
+    }
+    setCheckedIds(new Set()); loadShipments();
+  };
 
   const setFilter = (k,v) => setFilters(p=>({...p,[k]:v}));
   const setTextFilter = (k,v) => setTextFilters(p=>({...p,[k]:v}));
@@ -458,32 +502,46 @@ export default function App() {
                 {activeFilterCount>0&&<button onClick={clearFilters} style={{ padding:"5px 10px",borderRadius:6,border:"1px solid #fee2e2",background:"#fef2f2",color:"#dc2626",fontSize:11,fontWeight:600,cursor:"pointer" }}>✕ Clear all</button>}
               </div>
             </div>
+            {/* Batch Actions */}
+            {checkedIds.size > 0 && isAdmin && (
+              <div style={{ background:"#0f172a",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+                <span style={{ color:"#e2e8f0",fontSize:13,fontWeight:600 }}>{checkedIds.size} selected</span>
+                <div style={{ display:"flex",gap:8 }}>
+                  <button onClick={handleBatchDuplicate} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid #334155",background:"none",color:"#94a3b8",fontSize:12,fontWeight:600,cursor:"pointer" }}>Duplicate</button>
+                  <button onClick={handleBatchDelete} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid #7f1d1d",background:"#450a0a",color:"#fca5a5",fontSize:12,fontWeight:600,cursor:"pointer" }}>Delete</button>
+                  <button onClick={()=>setCheckedIds(new Set())} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid #334155",background:"none",color:"#64748b",fontSize:12,fontWeight:600,cursor:"pointer" }}>Cancel</button>
+                </div>
+              </div>
+            )}
             {/* Table */}
             <div style={{ background:"#fff",borderRadius:10,border:"1px solid #e2e8f0",overflow:"auto" }}>
-              <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:1580 }}>
+              <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:1680 }}>
                 <thead><tr style={{ background:"#f8fafc" }}>
-                  {["PO#","Cust PO#","TUC / Description","Customer","Route","Carrier","Booking","Cntr No","Cntr Qty","Vessel","ETD","ETA","QC","Space","Pay","Telex","B/L"].map(h=><th key={h} style={{ padding:"10px 7px",textAlign:"left",fontWeight:600,color:"#64748b",fontSize:10.5,borderBottom:"1px solid #e2e8f0",whiteSpace:"nowrap" }}>{h}</th>)}
+                  {isAdmin&&<th style={{ padding:"10px 4px 10px 10px",borderBottom:"1px solid #e2e8f0",width:32 }}><input type="checkbox" checked={filtered.length>0&&checkedIds.size===filtered.length} onChange={toggleCheckAll} style={{ cursor:"pointer",width:15,height:15 }}/></th>}
+                  {["PO#","Cust PO#","TUC / Description","Supplier","Customer","Route","Carrier","Booking","Cntr No","Cntr Qty","Vessel","ETD","ETA","QC","Space","Pay","Telex","B/L"].map(h=><th key={h} style={{ padding:"10px 7px",textAlign:"left",fontWeight:600,color:"#64748b",fontSize:10.5,borderBottom:"1px solid #e2e8f0",whiteSpace:"nowrap" }}>{h}</th>)}
                 </tr></thead>
                 <tbody>
-                  {filtered.length===0&&<tr><td colSpan={17} style={{ padding:40,textAlign:"center",color:"#94a3b8" }}>No shipments found</td></tr>}
-                  {filtered.map((o,i)=><tr key={o.id} onClick={()=>setSelectedId(o.id)} style={{ cursor:"pointer",borderBottom:i<filtered.length-1?"1px solid #f1f5f9":"none" }} onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <td style={{ padding:"10px 7px",fontWeight:600,color:"#0ea5e9",fontFamily:"'DM Mono',monospace",fontSize:11.5 }}>{o.po||"—"}</td>
-                    <td style={{ padding:"10px 7px",fontSize:11,color:"#64748b",fontFamily:"'DM Mono',monospace" }}>{o.customer_po||"—"}</td>
-                    <td style={{ padding:"10px 7px",maxWidth:150 }}><div style={{ fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:11.5 }}>{o.tuc||"—"}</div>{o.sku&&<div style={{ fontSize:10,color:"#94a3b8",fontFamily:"'DM Mono',monospace" }}>{o.sku}</div>}</td>
-                    <td style={{ padding:"10px 7px" }}><div style={{ fontWeight:500,fontSize:11.5 }}>{o.customer||"—"}</div>{isAdmin&&o.end_customer&&<div style={{ fontSize:10,color:"#94a3b8" }}>→ {o.end_customer}</div>}</td>
-                    <td style={{ padding:"10px 7px",fontSize:11,whiteSpace:"nowrap" }}>{o.pol&&o.pod?<><span style={{ fontWeight:500 }}>{(o.pol||"").split("(")[0].trim()}</span><span style={{ color:"#94a3b8",margin:"0 2px" }}>→</span><span style={{ fontWeight:500 }}>{(o.pod||"").split("(")[0].trim()}</span></>:"—"}</td>
-                    <td style={{ padding:"10px 7px",fontSize:11.5 }}><div style={{ fontWeight:500 }}>{o.carrier||"—"}</div>{o.carrier_agent&&<div style={{ fontSize:10,color:"#6366f1" }}>{o.carrier_agent}</div>}</td>
-                    <td style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#475569" }}>{o.booking_no||"—"}</td>
-                    <td style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#475569" }}>{o.container_no||"—"}</td>
-                    <td style={{ padding:"10px 7px",fontSize:11,color:"#475569" }}>{o.qty_container||"—"}</td>
-                    <td style={{ padding:"10px 7px",fontSize:11,color:"#475569",maxWidth:110,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{o.vessel||"—"}</td>
-                    <td style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{o.etd||"—"}</td>
-                    <td style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{o.eta||"—"}</td>
-                    <td style={{ padding:"10px 7px" }}>{o.qc_status?<Badge value={o.qc_status} small/>:"—"}</td>
-                    <td style={{ padding:"10px 7px" }}>{o.space_status?<Badge value={o.space_status} small/>:"—"}</td>
-                    <td style={{ padding:"10px 7px" }}>{o.local_payment?<Badge value={o.local_payment} small/>:"—"}</td>
-                    <td style={{ padding:"10px 7px" }}>{o.telex_release?<Badge value={o.telex_release} small/>:"—"}</td>
-                    <td style={{ padding:"10px 7px" }}>{o.bl_status?<Badge value={o.bl_status} small/>:"—"}</td>
+                  {filtered.length===0&&<tr><td colSpan={isAdmin?19:18} style={{ padding:40,textAlign:"center",color:"#94a3b8" }}>No shipments found</td></tr>}
+                  {filtered.map((o,i)=><tr key={o.id} style={{ cursor:"pointer",borderBottom:i<filtered.length-1?"1px solid #f1f5f9":"none",background:checkedIds.has(o.id)?"#f0f9ff":"transparent" }} onMouseEnter={e=>{if(!checkedIds.has(o.id))e.currentTarget.style.background="#f8fafc"}} onMouseLeave={e=>{if(!checkedIds.has(o.id))e.currentTarget.style.background="transparent"}}>
+                    {isAdmin&&<td style={{ padding:"10px 4px 10px 10px" }} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={checkedIds.has(o.id)} onChange={()=>toggleCheck(o.id)} style={{ cursor:"pointer",width:15,height:15 }}/></td>}
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontWeight:600,color:"#0ea5e9",fontFamily:"'DM Mono',monospace",fontSize:11.5 }}>{o.po||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontSize:11,color:"#64748b",fontFamily:"'DM Mono',monospace" }}>{o.customer_po||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",maxWidth:150 }}><div style={{ fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:11.5 }}>{o.tuc||"—"}</div>{o.sku&&<div style={{ fontSize:10,color:"#94a3b8",fontFamily:"'DM Mono',monospace" }}>{o.sku}</div>}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontSize:11.5 }}>{o.supplier||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px" }}><div style={{ fontWeight:500,fontSize:11.5 }}>{o.customer||"—"}</div>{isAdmin&&o.end_customer&&<div style={{ fontSize:10,color:"#94a3b8" }}>→ {o.end_customer}</div>}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontSize:11,whiteSpace:"nowrap" }}>{o.pol&&o.pod?<><span style={{ fontWeight:500 }}>{(o.pol||"").split("(")[0].trim()}</span><span style={{ color:"#94a3b8",margin:"0 2px" }}>→</span><span style={{ fontWeight:500 }}>{(o.pod||"").split("(")[0].trim()}</span></>:"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontSize:11.5 }}><div style={{ fontWeight:500 }}>{o.carrier||"—"}</div>{o.carrier_agent&&<div style={{ fontSize:10,color:"#6366f1" }}>{o.carrier_agent}</div>}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#475569" }}>{o.booking_no||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#475569" }}>{o.container_no||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontSize:11,color:"#475569" }}>{o.qty_container||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontSize:11,color:"#475569",maxWidth:110,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{o.vessel||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{o.etd||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{o.eta||"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px" }}>{o.qc_status?<Badge value={o.qc_status} small/>:"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px" }}>{o.space_status?<Badge value={o.space_status} small/>:"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px" }}>{o.local_payment?<Badge value={o.local_payment} small/>:"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px" }}>{o.telex_release?<Badge value={o.telex_release} small/>:"—"}</td>
+                    <td onClick={()=>setSelectedId(o.id)} style={{ padding:"10px 7px" }}>{o.bl_status?<Badge value={o.bl_status} small/>:"—"}</td>
                   </tr>)}
                 </tbody>
               </table>
@@ -498,7 +556,7 @@ export default function App() {
               <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{Object.keys(STATUS_CONFIGS).map(k=>selectedOrder[k]?<Badge key={k} value={selectedOrder[k]}/>:null)}</div>
             </div>
             <div style={{ display:"flex",gap:10,marginBottom:20,flexWrap:"wrap" }}>
-              {Object.entries(STATUS_CONFIGS).map(([key,cfg])=>{const val=selectedOrder[key];const editable=(isAdmin&&key!=="qc_status")||(!isAdmin&&key==="qc_status");return(
+              {Object.entries(STATUS_CONFIGS).map(([key,cfg])=>{const val=selectedOrder[key];const editable=isAdmin||(!isAdmin&&key==="qc_status");return(
                 <div key={key} style={{ background:"#fff",borderRadius:8,padding:"10px 14px",border:editable?"2px solid #0ea5e9":"1px solid #e2e8f0",flex:"1 1 140px",minWidth:140 }}>
                   <div style={{ fontSize:10,fontWeight:600,color:"#8896a7",textTransform:"uppercase",letterSpacing:0.8,marginBottom:6,display:"flex",justifyContent:"space-between" }}>{cfg.label}{editable&&<span style={{ fontSize:9,color:"#0ea5e9",fontWeight:700 }}>EDITABLE</span>}</div>
                   {editable?<select value={val||""} onChange={e=>handleUpdateField(selectedOrder.id,key,val,e.target.value)} style={{ width:"100%",padding:"5px 8px",borderRadius:5,border:"1px solid #bae6fd",background:"#f0f9ff",fontSize:12,fontWeight:600,outline:"none",cursor:"pointer",color:"#0c4a6e",boxSizing:"border-box" }}>{cfg.options.map(o=><option key={o}>{o}</option>)}</select>:val?<Badge value={val}/>:<span style={{ fontSize:12,color:"#cbd5e1" }}>—</span>}
