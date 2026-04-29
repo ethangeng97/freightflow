@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../supabase.js";
 import { Badge, Field, SectionHeader, FilterDropdown, Modal, Button, Input, Select, Spinner, EmptyState, Tag } from "../components/ui.jsx";
 import { ColumnManager } from "../components/ColumnManager.jsx";
@@ -31,22 +31,19 @@ export function ShipmentsPage({ user, view, setView, statFilter, clearStatFilter
   const [textFilters, setTextFilters] = useState({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
   const [checkedIds, setCheckedIds] = useState(new Set());
 
-  // Handle stat clicks from sidebar
-  useEffect(() => {
-    if (statFilter) {
-      clearFilters();
-      setSelectedId(null);
-      if (statFilter.qc_status === "pending") {
-        // QC pending — can't use simple filter, just show all non-approved via search
-      } else if (statFilter.entry_done) {
-        setFilters(p => ({ ...p, entry_done: statFilter.entry_done }));
-      } else {
-        const key = Object.keys(statFilter)[0];
-        if (key) setFilters(p => ({ ...p, [key]: statFilter[key] }));
-      }
-      clearStatFilter?.();
+  // Handle stat clicks from sidebar — apply once then clear
+  const statFilterRef = React.useRef(null);
+  if (statFilter && statFilter !== statFilterRef.current) {
+    statFilterRef.current = statFilter;
+    const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" };
+    if (statFilter.entry_done) {
+      base.entry_done = statFilter.entry_done;
+    } else if (statFilter.qc_status !== "pending") {
+      const key = Object.keys(statFilter)[0];
+      if (key) base[key] = statFilter[key];
     }
-  }, [statFilter]);
+    setTimeout(() => { setFilters(base); setSelectedId(null); setSearch(""); setTextFilters({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" }); clearStatFilter?.(); }, 0);
+  }
 
   // Load
   const loadShipments = useCallback(async () => {
