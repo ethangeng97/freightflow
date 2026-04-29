@@ -30,6 +30,8 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" });
   const [textFilters, setTextFilters] = useState({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
   const [checkedIds, setCheckedIds] = useState(new Set());
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(0);
 
   // Handle stat clicks from sidebar
   const statFilterApplied = useRef(null);
@@ -118,6 +120,12 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
     }
     return true;
   }), [shipments, filters, textFilters, search]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [filters, textFilters, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pagedRows = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   const activeFilterCount =
     Object.values(filters).filter(v => v !== "All").length +
@@ -277,10 +285,27 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
           )}
 
           <ShipmentTable
-            rows={filtered} columns={visibleCols} role={role}
+            rows={pagedRows} columns={visibleCols} role={role}
             checkedIds={checkedIds} onToggleCheck={toggleCheck} onToggleCheckAll={toggleCheckAll}
             onOpen={setSelectedId}
           />
+
+          {/* Pagination */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, fontSize: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: "#64748b" }}>{t("每页")}</span>
+              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none", cursor: "pointer" }}>
+                {[20, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span style={{ color: "#94a3b8" }}>{filtered.length} {t("条")} · {t("第")} {page + 1}/{totalPages} {t("页")}</span>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button disabled={page === 0} onClick={() => setPage(0)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page === 0 ? "default" : "pointer", color: page === 0 ? "#cbd5e1" : "#0f172a" }}>⟨⟨</button>
+              <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page === 0 ? "default" : "pointer", color: page === 0 ? "#cbd5e1" : "#0f172a" }}>⟨</button>
+              <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page >= totalPages - 1 ? "default" : "pointer", color: page >= totalPages - 1 ? "#cbd5e1" : "#0f172a" }}>⟩</button>
+              <button disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page >= totalPages - 1 ? "default" : "pointer", color: page >= totalPages - 1 ? "#cbd5e1" : "#0f172a" }}>⟩⟩</button>
+            </div>
+          </div>
         </>
       )}
 
@@ -703,112 +728,114 @@ function SelOrInput({ label, field, form, set, options }) {
 function LoadingDetailModal({ shipment, onClose, onSaved }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [crossWarnings, setCrossWarnings] = useState([]);
-  const [form, setForm] = useState({ booking_no: "", container_no: "", container_type: "40HQ", booked_packages: "", booked_weight: "", booked_volume: "", actual_packages: "", actual_weight: "", actual_volume: "", carton_size: "", notes: "" });
   const [saving, setSaving] = useState(false);
+  const emptyRow = { po: shipment.po || "", sku: "", tuc: "", hs_code: "", booked_packages: "", packing_unit: "CTNS", booked_weight: "", booked_volume: "", marks: "", booking_no: "", container_no: "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("created_at");
+    const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("sort_order").order("created_at");
     setItems(data || []); setLoading(false);
-    if (data && data.length > 0) {
-      const bns = [...new Set(data.map(d => d.booking_no).filter(Boolean))];
-      const w = [];
-      for (const bn of bns) {
-        const { data: o } = await supabase.from("loading_details").select("shipment_id").eq("booking_no", bn).neq("shipment_id", shipment.id);
-        if (o && o.length > 0) w.push({ booking_no: bn, count: o.length });
-      }
-      setCrossWarnings(w);
-    }
   }, [shipment.id]);
   useEffect(() => { load(); }, [load]);
 
+  const addRow = async () => {
+    setSaving(true);
+    const row = { ...emptyRow, shipment_id: shipment.id, sort_order: items.length };
+    const { error } = await supabase.from("loading_details").insert(row);
+    if (error) alert(error.message);
+    setSaving(false); load();
+  };
+
+  const updateCell = async (id, field, value) => {
+    const numFields = ["booked_packages", "actual_packages", "booked_weight", "actual_weight", "booked_volume", "actual_volume"];
+    const v = numFields.includes(field) ? (value ? Number(value) : null) : value;
+    await supabase.from("loading_details").update({ [field]: v }).eq("id", id);
+    // Update local state immediately for responsiveness
+    setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: v } : it));
+  };
+
+  const deleteRow = async (id) => {
+    if (!confirm("Delete this row?")) return;
+    await supabase.from("loading_details").delete().eq("id", id);
+    load(); syncToShipment();
+  };
+
   const syncToShipment = async () => {
-    const { data: ld } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("created_at");
+    const { data: ld } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id);
     if (!ld || ld.length === 0) return;
-    const bookings   = [...new Set(ld.map(d => d.booking_no).filter(Boolean))].join(", ");
+    const bookings = [...new Set(ld.map(d => d.booking_no).filter(Boolean))].join(", ");
     const containers = [...new Set(ld.map(d => d.container_no).filter(Boolean))].join(", ");
     const typeCount = {};
     ld.forEach(d => { if (d.container_type) typeCount[d.container_type] = (typeCount[d.container_type] || 0) + 1; });
     const qtyStr = Object.entries(typeCount).map(([t, c]) => `${c}x${t}`).join(", ");
     const updates = {};
-    if (bookings)   updates.booking_no   = bookings;
+    if (bookings) updates.booking_no = bookings;
     if (containers) updates.container_no = containers;
-    if (qtyStr)     updates.qty_container = qtyStr;
+    if (qtyStr) updates.qty_container = qtyStr;
     if (Object.keys(updates).length > 0) await supabase.from("shipments").update(updates).eq("id", shipment.id);
   };
 
-  const addItem = async () => {
-    if (!form.booking_no && !form.container_no) { alert("Booking No or Container No required"); return; }
-    setSaving(true);
-    const c = { ...form, shipment_id: shipment.id };
-    ["booked_packages", "actual_packages"].forEach(k => { c[k] = c[k] ? parseInt(c[k]) : null; });
-    ["booked_weight", "booked_volume", "actual_weight", "actual_volume"].forEach(k => { c[k] = c[k] ? parseFloat(c[k]) : null; });
-    const { error } = await supabase.from("loading_details").insert(c);
-    if (error) { alert(error.message); setSaving(false); return; }
-    setForm({ booking_no: "", container_no: "", container_type: "40HQ", booked_packages: "", booked_weight: "", booked_volume: "", actual_packages: "", actual_weight: "", actual_volume: "", carton_size: "", notes: "" });
-    setSaving(false); load(); await syncToShipment(); onSaved?.();
-  };
-  const deleteItem = async (id) => { if (!confirm("Delete?")) return; await supabase.from("loading_details").delete().eq("id", id); load(); await syncToShipment(); onSaved?.(); };
-
   const totals = useMemo(() => {
-    const t = { bp: 0, bw: 0, bv: 0, ap: 0, aw: 0, av: 0 };
-    items.forEach(i => { t.bp += i.booked_packages || 0; t.bw += i.booked_weight || 0; t.bv += i.booked_volume || 0; t.ap += i.actual_packages || 0; t.aw += i.actual_weight || 0; t.av += i.actual_volume || 0; });
+    const t = { pkgs: 0, wt: 0, vol: 0 };
+    items.forEach(i => { t.pkgs += Number(i.booked_packages) || 0; t.wt += Number(i.booked_weight) || 0; t.vol += Number(i.booked_volume) || 0; });
     return t;
   }, [items]);
 
-  return (
-    <Modal onClose={onClose} width={820} title={`Loading Details — ${shipment.po}`}>
-      {crossWarnings.length > 0 && (
-        <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fef9c3", border: "1px solid #fde68a", marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e" }}>⚠ Cross-container alert</div>
-          {crossWarnings.map(w => <div key={w.booking_no} style={{ fontSize: 12, color: "#92400e", marginTop: 4 }}>Booking <strong>{w.booking_no}</strong> is also used by {w.count} other PO(s)</div>)}
-        </div>
-      )}
-      <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-          <Input label="Booking No" value={form.booking_no} onChange={e => setForm(p => ({ ...p, booking_no: e.target.value }))} />
-          <Input label="Container No" value={form.container_no} onChange={e => setForm(p => ({ ...p, container_no: e.target.value }))} />
-          <Select label="Container Type" value={form.container_type} onChange={e => setForm(p => ({ ...p, container_type: e.target.value }))} options={["20GP", "40GP", "40HQ", "45HQ", "20RF", "40RF"]} />
-          <Input label="Carton Size" value={form.carton_size} onChange={e => setForm(p => ({ ...p, carton_size: e.target.value }))} />
-          <Input label="Booked Pkgs" type="number" value={form.booked_packages} onChange={e => setForm(p => ({ ...p, booked_packages: e.target.value }))} />
-          <Input label="Booked Weight" type="number" value={form.booked_weight} onChange={e => setForm(p => ({ ...p, booked_weight: e.target.value }))} />
-          <Input label="Booked Volume" type="number" value={form.booked_volume} onChange={e => setForm(p => ({ ...p, booked_volume: e.target.value }))} />
-          <div />
-          <Input label="Actual Pkgs" type="number" value={form.actual_packages} onChange={e => setForm(p => ({ ...p, actual_packages: e.target.value }))} />
-          <Input label="Actual Weight" type="number" value={form.actual_weight} onChange={e => setForm(p => ({ ...p, actual_weight: e.target.value }))} />
-          <Input label="Actual Volume" type="number" value={form.actual_volume} onChange={e => setForm(p => ({ ...p, actual_volume: e.target.value }))} />
-          <Input label="Notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-          <Button onClick={addItem} disabled={saving}>{saving ? "Saving..." : "+ Add Loading"}</Button>
-        </div>
-      </div>
+  const cellStyle = { padding: "4px 3px", fontSize: 11 };
+  const inputStyle = { width: "100%", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" };
+  const inputStyleSm = { ...inputStyle, width: 70, textAlign: "right" };
 
-      {loading ? <Spinner /> : items.length === 0 ? <EmptyState>No loading records yet.</EmptyState> :
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
-          <thead><tr style={{ background: "#f8fafc" }}>
-            {["Booking", "Container", "Type", "Booked P/W/V", "Actual P/W/V", "Notes", ""].map(h => <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {items.map((it, i) => (
-              <tr key={it.id} style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <td style={{ padding: "8px 10px", fontFamily: "'DM Mono',monospace" }}>{it.booking_no || "—"}</td>
-                <td style={{ padding: "8px 10px", fontFamily: "'DM Mono',monospace" }}>{it.container_no || "—"}</td>
-                <td style={{ padding: "8px 10px" }}>{it.container_type || "—"}</td>
-                <td style={{ padding: "8px 10px" }}>{it.booked_packages || "0"} / {it.booked_weight || "0"} / {it.booked_volume || "0"}</td>
-                <td style={{ padding: "8px 10px" }}>{it.actual_packages || "0"} / {it.actual_weight || "0"} / {it.actual_volume || "0"}</td>
-                <td style={{ padding: "8px 10px", color: "#64748b" }}>{it.notes || "—"}</td>
-                <td style={{ padding: "8px 10px" }}><button onClick={() => deleteItem(it.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Del</button></td>
-              </tr>
-            ))}
-            <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
-              <td colSpan={3} style={{ padding: "10px", textAlign: "right" }}>Totals</td>
-              <td style={{ padding: "10px" }}>{totals.bp} / {totals.bw.toFixed(2)} / {totals.bv.toFixed(2)}</td>
-              <td style={{ padding: "10px" }}>{totals.ap} / {totals.aw.toFixed(2)} / {totals.av.toFixed(2)}</td>
-              <td colSpan={2} />
-            </tr>
-          </tbody>
-        </table>}
+  return (
+    <Modal onClose={() => { syncToShipment(); onSaved?.(); onClose(); }} width={1050} title={`${t("Loading Details")} — ${shipment.po}`}>
+      {loading ? <Spinner /> : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead><tr style={{ background: "#f0f9ff" }}>
+                {["PO", "SKU", t("TUC"), "HS Code", t("件数"), t("包装"), t("毛重 KGS"), t("体积 CBM"), t("唛头"), t("Booking"), t("柜号"), t("箱型"), t("委托方"), ""].map(h =>
+                  <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#0369a1", fontSize: 10, borderBottom: "2px solid #bae6fd", whiteSpace: "nowrap" }}>{h}</th>
+                )}
+              </tr></thead>
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={it.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 90 }} value={it.po || ""} onChange={e => updateCell(it.id, "po", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 100 }} value={it.sku || ""} onChange={e => updateCell(it.id, "sku", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 140 }} value={it.tuc || ""} onChange={e => updateCell(it.id, "tuc", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 90 }} value={it.hs_code || ""} onChange={e => updateCell(it.id, "hs_code", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={inputStyleSm} type="number" value={it.booked_packages ?? ""} onChange={e => updateCell(it.id, "booked_packages", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 50 }} value={it.packing_unit || "CTNS"} onChange={e => updateCell(it.id, "packing_unit", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={inputStyleSm} type="number" step="0.01" value={it.booked_weight ?? ""} onChange={e => updateCell(it.id, "booked_weight", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={inputStyleSm} type="number" step="0.01" value={it.booked_volume ?? ""} onChange={e => updateCell(it.id, "booked_volume", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 70 }} value={it.marks || ""} onChange={e => updateCell(it.id, "marks", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 100 }} value={it.booking_no || ""} onChange={e => updateCell(it.id, "booking_no", e.target.value)} /></td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 80 }} value={it.container_no || ""} onChange={e => updateCell(it.id, "container_no", e.target.value)} /></td>
+                    <td style={cellStyle}>
+                      <select value={it.container_type || "40HQ"} onChange={e => updateCell(it.id, "container_type", e.target.value)} style={{ ...inputStyle, width: 65 }}>
+                        {["20GP","40GP","40HQ","45HQ","20RF","40RF"].map(o => <option key={o}>{o}</option>)}
+                      </select>
+                    </td>
+                    <td style={cellStyle}><input style={{ ...inputStyle, width: 80 }} value={it.supplier || ""} onChange={e => updateCell(it.id, "supplier", e.target.value)} /></td>
+                    <td style={cellStyle}><button onClick={() => deleteRow(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button></td>
+                  </tr>
+                ))}
+                {items.length > 0 && (
+                  <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
+                    <td colSpan={4} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
+                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.pkgs}</td>
+                    <td />
+                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(2)}</td>
+                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(2)}</td>
+                    <td colSpan={6} />
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <Button variant="secondary" onClick={addRow} disabled={saving}>+ {t("新增行")}</Button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

@@ -371,8 +371,27 @@ function NewContainerModal({ types, onClose, onSave }) {
 // Add Item Modal
 // =========================================================================
 function AddItemModal({ onClose, onSave }) {
+  const [mode, setMode] = useState("select"); // "select" or "manual"
+  const [shipments, setShipments] = useState([]);
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({ supplier: "", po: "", customer_po: "", tuc: "", sku: "", qty: "", weight: "", volume: "", hbl: "", notes: "" });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    supabase.from("shipments").select("id,po,customer_po,tuc,sku,supplier,qty_packages,weight,volume").order("created_at", { ascending: false }).then(({ data }) => setShipments(data || []));
+  }, []);
+
+  const filtered = shipments.filter(s => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return [s.po, s.customer_po, s.tuc, s.sku, s.supplier].some(v => (v || "").toLowerCase().includes(q));
+  });
+
+  const selectShipment = (s) => {
+    setForm({ supplier: s.supplier || "", po: s.po || "", customer_po: s.customer_po || "", tuc: s.tuc || "", sku: s.sku || "", qty: s.qty_packages || "", weight: s.weight || "", volume: s.volume || "", hbl: "", notes: "", shipment_id: s.id });
+    setMode("manual");
+  };
+
   const submit = () => {
     const data = { ...form };
     if (data.qty) data.qty = Number(data.qty);
@@ -380,24 +399,61 @@ function AddItemModal({ onClose, onSave }) {
     if (data.volume) data.volume = Number(data.volume);
     onSave(data);
   };
+
   return (
-    <Modal onClose={onClose} title={t("Add Loading Item")} width={600}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Input label={t("Supplier")} value={form.supplier} onChange={e => set("supplier", e.target.value)} />
-        <Input label="PO" value={form.po} onChange={e => set("po", e.target.value)} />
-        <Input label="Customer PO" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} />
-        <Input label={t("TUC")} value={form.tuc} onChange={e => set("tuc", e.target.value)} />
-        <Input label="SKU" value={form.sku} onChange={e => set("sku", e.target.value)} />
-        <Input label="QTY" type="number" value={form.qty} onChange={e => set("qty", e.target.value)} />
-        <Input label={t("Weight (kg)")} type="number" value={form.weight} onChange={e => set("weight", e.target.value)} />
-        <Input label="CBM" type="number" value={form.volume} onChange={e => set("volume", e.target.value)} />
-        <Input label="HBL" value={form.hbl} onChange={e => set("hbl", e.target.value)} />
-        <Input label={t("Notes")} value={form.notes} onChange={e => set("notes", e.target.value)} />
+    <Modal onClose={onClose} title={t("Add Loading Item")} width={700}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button onClick={() => setMode("select")} style={{ padding: "6px 14px", borderRadius: 6, border: mode === "select" ? "2px solid #0ea5e9" : "1px solid #e2e8f0", background: mode === "select" ? "#f0f9ff" : "#fff", color: mode === "select" ? "#0369a1" : "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("从货件选择")}</button>
+        <button onClick={() => setMode("manual")} style={{ padding: "6px 14px", borderRadius: 6, border: mode === "manual" ? "2px solid #0ea5e9" : "1px solid #e2e8f0", background: mode === "manual" ? "#f0f9ff" : "#fff", color: mode === "manual" ? "#0369a1" : "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("手动输入")}</button>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-        <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
-        <Button onClick={submit}>{t("Save")}</Button>
-      </div>
+
+      {mode === "select" && (
+        <>
+          <Input placeholder={t("搜索 PO / Customer PO / 品名...")} value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 10 }} />
+          <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead><tr style={{ background: "#f8fafc", position: "sticky", top: 0 }}>
+                {["PO", "Customer PO", t("TUC"), t("Supplier"), "QTY"].map(h =>
+                  <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                )}
+              </tr></thead>
+              <tbody>
+                {filtered.slice(0, 50).map(s => (
+                  <tr key={s.id} onClick={() => selectShipment(s)} style={{ cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f0f9ff"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <td style={{ padding: "6px 8px", fontFamily: "'DM Mono',monospace", fontWeight: 600, color: "#0369a1" }}>{s.po || "—"}</td>
+                    <td style={{ padding: "6px 8px", fontFamily: "'DM Mono',monospace" }}>{s.customer_po || "—"}</td>
+                    <td style={{ padding: "6px 8px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tuc || "—"}</td>
+                    <td style={{ padding: "6px 8px" }}>{tSupplier(s.supplier) || "—"}</td>
+                    <td style={{ padding: "6px 8px" }}>{s.qty_packages || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {mode === "manual" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Input label={t("Supplier")} value={form.supplier} onChange={e => set("supplier", e.target.value)} />
+            <Input label="PO" value={form.po} onChange={e => set("po", e.target.value)} />
+            <Input label="Customer PO" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} />
+            <Input label={t("TUC")} value={form.tuc} onChange={e => set("tuc", e.target.value)} />
+            <Input label="SKU" value={form.sku} onChange={e => set("sku", e.target.value)} />
+            <Input label="QTY" type="number" value={form.qty} onChange={e => set("qty", e.target.value)} />
+            <Input label={t("Weight (kg)")} type="number" value={form.weight} onChange={e => set("weight", e.target.value)} />
+            <Input label="CBM" type="number" value={form.volume} onChange={e => set("volume", e.target.value)} />
+            <Input label="HBL" value={form.hbl} onChange={e => set("hbl", e.target.value)} />
+            <Input label={t("Notes")} value={form.notes} onChange={e => set("notes", e.target.value)} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+            <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
+            <Button onClick={submit}>{t("Save")}</Button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }
