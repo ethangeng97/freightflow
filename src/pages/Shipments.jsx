@@ -1003,13 +1003,19 @@ function ShipmentLoadingFromContainers({ order, role }) {
           const bkgNos = [...new Set(data.map(c => c.booking_no).filter(Boolean))].join(", ");
           const vessels = [...new Set(data.map(c => c.vessel).filter(Boolean))];
           const carriers = [...new Set(data.map(c => c.carrier).filter(Boolean))];
+          const agents = [...new Set(data.map(c => c.carrier_agent).filter(Boolean))];
           const updates = {};
-          if (ctrNos && ctrNos !== order.container_no) updates.container_no = ctrNos;
-          if (bkgNos && bkgNos !== order.booking_no) updates.booking_no = bkgNos;
-          if (vessels.length === 1 && !order.vessel) updates.vessel = vessels[0];
-          if (carriers.length === 1 && !order.carrier) updates.carrier = carriers[0];
+          if (ctrNos) updates.container_no = ctrNos;
+          if (bkgNos) updates.booking_no = bkgNos;
+          if (vessels.length > 0) updates.vessel = vessels.join(", ");
+          if (carriers.length > 0) updates.carrier = carriers.join(", ");
+          if (agents.length > 0 && !order.carrier_agent) updates.carrier_agent = agents.join(", ");
+          // Count unique containers by type
+          const typeCount = {};
+          data.forEach(c => { const t = c.qty_container || "40HQ"; typeCount[t] = (typeCount[t] || 0) + 1; });
+          updates.qty_container = Object.entries(typeCount).map(([t, c]) => `${c}x${t}`).join(", ");
           if (Object.keys(updates).length > 0) {
-            supabase.from("shipments").update(updates).eq("id", order.id);
+            await supabase.from("shipments").update(updates).eq("id", order.id);
           }
         }
       }

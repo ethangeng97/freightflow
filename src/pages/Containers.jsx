@@ -341,12 +341,12 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
               {Object.entries(supplierSummary).map(([s, d]) => (
                 <div key={s} style={{ background: "#fff", borderRadius: 6, padding: "6px 10px", border: "1px solid #fde68a" }}>
                   <span style={{ fontWeight: 600, color: "#0f172a" }}>{tSupplier(s)}</span>
-                  <span style={{ color: "#64748b", marginLeft: 8 }}>{d.count} items · {d.qty} pcs · {d.weight.toFixed(4)} kg · {d.volume.toFixed(4)} m³</span>
+                  <span style={{ color: "#64748b", marginLeft: 8 }}>{d.count} items · {d.qty} CTNS · {d.weight.toFixed(4)} kg · {d.volume.toFixed(4)} m³</span>
                 </div>
               ))}
             </div>
             <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: "#0f172a" }}>
-              {t("Total")}: {totalQty} pcs · {totalWeight.toFixed(4)} kg · {totalVolume.toFixed(4)} m³
+              {t("Total")}: {totalQty} CTNS · {totalWeight.toFixed(4)} kg · {totalVolume.toFixed(4)} m³
             </div>
           </div>
         )}
