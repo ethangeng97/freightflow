@@ -907,16 +907,16 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
   const doImport = async () => {
     if (rows.length === 0) return;
     setImporting(true);
-    let success = 0, failed = 0;
+    let success = 0, failed = 0, lastErr = "";
     // Batch insert in chunks of 20
     for (let i = 0; i < rows.length; i += 20) {
       const batch = rows.slice(i, i + 20);
       try {
         const { error } = await supabase.from("shipments").insert(batch);
-        if (error) { failed += batch.length; } else { success += batch.length; }
-      } catch (e) { failed += batch.length; }
+        if (error) { failed += batch.length; lastErr = error.message || JSON.stringify(error); } else { success += batch.length; }
+      } catch (e) { failed += batch.length; lastErr = e.message || String(e); }
     }
-    setResult({ success, failed });
+    setResult({ success, failed, lastErr });
     setImporting(false);
     if (success > 0) setTimeout(() => onDone(), 1500);
   };
@@ -951,6 +951,7 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
           <div style={{ fontSize: 13, fontWeight: 600, color: result.failed ? "#92400e" : "#065f46" }}>
             ✓ 导入完成：{result.success} 条成功{result.failed > 0 && `，${result.failed} 条失败`}
           </div>
+          {result.lastErr && <div style={{ fontSize: 11, color: "#92400e", marginTop: 6, wordBreak: "break-all" }}>错误: {result.lastErr}</div>}
         </div>
       )}
 
