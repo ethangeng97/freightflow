@@ -227,7 +227,6 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
         <ShipmentDetail order={selectedOrder} logs={orderLogs} role={role} user={user}
           onBack={() => setSelectedId(null)}
           onUpdateField={handleUpdateField}
-          onOpenLoading={() => setLoadingDetailShipment(selectedOrder)}
           refData={refData} />
       ) : (
         <>
@@ -413,7 +412,7 @@ function ShipmentTable({ rows, columns, role, checkedIds, onToggleCheck, onToggl
 // =========================================================================
 // Shipment Detail
 // =========================================================================
-function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpenLoading, refData }) {
+function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refData }) {
   const [tab, setTab] = useState("overview");
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({});
@@ -572,13 +571,8 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
               <EditableField label="ETA" field="eta" type="date" />
             </div>
           </div>
-          {(role === "admin" || role === "operator") &&
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #f59e0b" }}>
-              <SectionHeader icon="📋" title={t("Loading Details")} accent="#f59e0b"
-                right={<Button small variant="accent" onClick={onOpenLoading}>+ {t("Manage Loading")}</Button>} />
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>{t("Click to manage loading records.")}</p>
-            </div>}
-          <ShipmentContainers shipmentId={order.id} po={order.po} customerPo={order.customer_po} bookingNo={order.booking_no} containerNo={order.container_no} />
+          {/* Loading Data — from container_items, matched by PO */}
+          <ShipmentLoadingFromContainers order={order} role={role} />
         </>
       )}
       {tab === "history" && (
@@ -969,68 +963,136 @@ function BatchUpdateBar({ checkedIds, role, user, onClear, onUpdate, onDelete, o
   );
 }
 
-// =========================================================================
-// Shipment → Containers link (shows containers that reference this shipment)
-// =========================================================================
-function ShipmentContainers({ shipmentId, po, customerPo, bookingNo, containerNo }) {
+// Show loading data from container_items, matched by PO/customer_po
+// Compares original shipment data vs real loading data
+function ShipmentLoadingFromContainers({ order, role }) {
+  const [items, setItems] = useState([]);
   const [containers, setContainers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const seen = new Set();
-      const results = [];
-
-      // 1. Find via container_items matching shipment_id, po, or customer_po
+      // Find container_items matching this shipment's PO or customer_po
       const queries = [];
-      if (shipmentId) queries.push(supabase.from("container_items").select("container_id").eq("shipment_id", shipmentId));
-      if (po) queries.push(supabase.from("container_items").select("container_id").eq("po", po));
-      if (customerPo) queries.push(supabase.from("container_items").select("container_id").eq("customer_po", String(customerPo)));
-
-      const itemResults = await Promise.all(queries);
-      const containerIds = new Set();
-      for (const r of itemResults) {
+      if (order.po) queries.push(supabase.from("container_items").select("*").eq("po", order.po));
+      if (order.customer_po) queries.push(supabase.from("container_items").select("*").eq("customer_po", String(order.customer_po)));
+      const results = await Promise.all(queries);
+      const seen = new Set();
+      const allItems = [];
+      for (const r of results) {
         for (const item of (r.data || [])) {
-          containerIds.add(item.container_id);
+          if (!seen.has(item.id)) { seen.add(item.id); allItems.push(item); }
         }
       }
+      setItems(allItems);
 
-      // 2. Also find containers matching booking_no or container_no directly
-      if (bookingNo) {
-        const { data } = await supabase.from("containers").select("id").eq("booking_no", bookingNo);
-        (data || []).forEach(c => containerIds.add(c.id));
+      // Fetch associated containers
+      const cIds = [...new Set(allItems.map(i => i.container_id).filter(Boolean))];
+      if (cIds.length > 0) {
+        const { data } = await supabase.from("containers").select("*").in("id", cIds);
+        setContainers(data || []);
       }
-      if (containerNo) {
-        const { data } = await supabase.from("containers").select("id").eq("container_no", containerNo);
-        (data || []).forEach(c => containerIds.add(c.id));
-      }
-
-      // 3. Fetch full container data
-      if (containerIds.size > 0) {
-        const { data } = await supabase.from("containers").select("*").in("id", [...containerIds]);
-        results.push(...(data || []));
-      }
-
-      setContainers(results);
       setLoading(false);
     })();
-  }, [shipmentId, po, customerPo, bookingNo, containerNo]);
+  }, [order.po, order.customer_po]);
 
-  if (loading || containers.length === 0) return null;
+  if (loading) return null;
+
+  const ctrMap = Object.fromEntries(containers.map(c => [c.id, c]));
+
+  // Original data from shipment
+  const origQty = Number(order.qty_packages) || 0;
+  const origWeight = Number(order.weight) || 0;
+  const origVolume = Number(order.volume) || 0;
+
+  // Real loading data from container_items
+  const realQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+  const realWeight = items.reduce((s, i) => s + (Number(i.weight) || 0), 0);
+  const realVolume = items.reduce((s, i) => s + (Number(i.volume) || 0), 0);
+
+  const diffQty = realQty - origQty;
+  const diffWeight = realWeight - origWeight;
+  const diffVolume = realVolume - origVolume;
+  const diffColor = (v) => v === 0 ? "#64748b" : v > 0 ? "#16a34a" : "#dc2626";
 
   return (
-    <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #0ea5e9", marginTop: 14 }}>
-      <SectionHeader icon="🚛" title={t("Containers")} accent="#0ea5e9" />
-      {containers.map(c => (
-        <div key={c.id} style={{ background: "#f0f9ff", borderRadius: 8, padding: 10, marginTop: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontWeight: 600, fontSize: 12, color: "#0369a1", fontFamily: "'DM Mono',monospace" }}>{c.container_no || "—"}</span>
-            <span style={{ fontSize: 11, color: "#64748b" }}>
-              {c.booking_no || ""} · {c.vessel || ""} · {c.carrier || ""} · ETD {c.etd || "—"}
-            </span>
-          </div>
+    <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #f59e0b", marginBottom: 14 }}>
+      <SectionHeader icon="📋" title={t("Loading Details")} accent="#f59e0b" />
+
+      {items.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>
+          {t("暂无装柜数据")} — {t("请在 Container 中录入装柜明细")}
         </div>
-      ))}
+      ) : (
+        <>
+          {/* Original vs Real comparison */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10, marginBottom: 14 }}>
+            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10, border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("件数")}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "#94a3b8" }}>{t("原数据")}: {origQty}</span>
+                <span style={{ fontWeight: 700 }}>{t("实际")}: {realQty}</span>
+              </div>
+              {origQty > 0 && <div style={{ fontSize: 11, color: diffColor(diffQty), fontWeight: 600, marginTop: 2 }}>{diffQty > 0 ? "+" : ""}{diffQty}</div>}
+            </div>
+            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10, border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("毛重 KGS")}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "#94a3b8" }}>{t("原数据")}: {origWeight}</span>
+                <span style={{ fontWeight: 700 }}>{t("实际")}: {realWeight.toFixed(4)}</span>
+              </div>
+              {origWeight > 0 && <div style={{ fontSize: 11, color: diffColor(diffWeight), fontWeight: 600, marginTop: 2 }}>{diffWeight > 0 ? "+" : ""}{diffWeight.toFixed(4)}</div>}
+            </div>
+            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10, border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>CBM</div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "#94a3b8" }}>{t("原数据")}: {origVolume}</span>
+                <span style={{ fontWeight: 700 }}>{t("实际")}: {realVolume.toFixed(4)}</span>
+              </div>
+              {origVolume > 0 && <div style={{ fontSize: 11, color: diffColor(diffVolume), fontWeight: 600, marginTop: 2 }}>{diffVolume > 0 ? "+" : ""}{diffVolume.toFixed(4)}</div>}
+            </div>
+          </div>
+
+          {/* Loading items table */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginBottom: 8 }}>
+            <thead><tr style={{ background: "#fffbeb" }}>
+              {[t("Supplier"), t("TUC"), "SKU", "QTY", t("Weight"), "CBM", "HBL", t("柜号"), t("Booking")].map(h =>
+                <th key={h} style={{ padding: "4px 4px", textAlign: "left", fontWeight: 600, color: "#92400e", fontSize: 10, borderBottom: "1px solid #fde68a" }}>{h}</th>
+              )}
+            </tr></thead>
+            <tbody>
+              {items.map(it => {
+                const ctr = ctrMap[it.container_id];
+                return (
+                  <tr key={it.id} style={{ borderBottom: "1px solid #fef3c7" }}>
+                    <td style={{ padding: "4px" }}>{tSupplier(it.supplier) || "—"}</td>
+                    <td style={{ padding: "4px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.tuc || "—"}</td>
+                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 9 }}>{it.sku || "—"}</td>
+                    <td style={{ padding: "4px", textAlign: "right" }}>{it.qty || "—"}</td>
+                    <td style={{ padding: "4px", textAlign: "right" }}>{it.weight || "—"}</td>
+                    <td style={{ padding: "4px", textAlign: "right" }}>{it.volume || "—"}</td>
+                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 10 }}>{it.hbl || "—"}</td>
+                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 10, color: "#0369a1" }}>{ctr?.container_no || "—"}</td>
+                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 10 }}>{ctr?.booking_no || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Containers list */}
+          {containers.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {containers.map(c => (
+                <div key={c.id} style={{ background: "#f0f9ff", borderRadius: 6, padding: "6px 10px", marginTop: 4, fontSize: 11, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 600, color: "#0369a1", fontFamily: "'DM Mono',monospace" }}>🚛 {c.container_no || "—"}</span>
+                  <span style={{ color: "#64748b" }}>{c.booking_no || ""} · {c.vessel || ""} · {c.carrier || ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
