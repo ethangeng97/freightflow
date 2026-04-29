@@ -3,6 +3,20 @@
 
 const zh = {
   // Sidebar
+  "Containers": "柜子",
+  "New Container": "新建柜子",
+  "No containers found": "暂无柜子",
+  "Container No": "柜号",
+  "Container Info": "柜子信息",
+  "Seal No": "铅封号",
+  "Type": "类型",
+  "Add Item": "添加明细",
+  "Add Loading Item": "添加装柜明细",
+  "Loading Items": "装柜明细",
+  "暂无装柜明细": "暂无装柜明细",
+  "Summary": "汇总",
+  "备注（短出/剩余空间等）": "备注（短出/剩余空间等）",
+  "Back": "返回",
   "Shipments": "货件",
   "Audit Log": "操作日志",
   "Customers": "客户",

@@ -553,6 +553,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
                 right={<Button small variant="accent" onClick={onOpenLoading}>+ {t("Manage Loading")}</Button>} />
               <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>{t("Click to manage loading records.")}</p>
             </div>}
+          <ShipmentContainers shipmentId={order.id} po={order.po} customerPo={order.customer_po} />
         </>
       )}
       {tab === "history" && (
@@ -911,6 +912,77 @@ function BatchUpdateBar({ checkedIds, role, user, onClear, onUpdate, onDelete, o
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// =========================================================================
+// Shipment → Containers link (shows containers that reference this shipment)
+// =========================================================================
+function ShipmentContainers({ shipmentId, po, customerPo }) {
+  const [items, setItems] = useState([]);
+  const [containers, setContainers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      // Find container_items that match this shipment by shipment_id, po, or customer_po
+      const filters = [];
+      if (shipmentId) filters.push(supabase.from("container_items").select("*,containers(*)").eq("shipment_id", shipmentId));
+      if (po) filters.push(supabase.from("container_items").select("*,containers(*)").eq("po", po));
+      if (customerPo) filters.push(supabase.from("container_items").select("*,containers(*)").eq("customer_po", String(customerPo)));
+
+      const results = await Promise.all(filters);
+      const allItems = [];
+      const seen = new Set();
+      for (const r of results) {
+        for (const item of (r.data || [])) {
+          if (!seen.has(item.id)) {
+            seen.add(item.id);
+            allItems.push(item);
+          }
+        }
+      }
+      setItems(allItems);
+      setLoading(false);
+    })();
+  }, [shipmentId, po, customerPo]);
+
+  if (loading) return null;
+  if (items.length === 0) return null;
+
+  // Group by container
+  const byContainer = {};
+  for (const it of items) {
+    const cid = it.container_id;
+    if (!byContainer[cid]) byContainer[cid] = { container: it.containers, items: [] };
+    byContainer[cid].items.push(it);
+  }
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #0ea5e9", marginTop: 14 }}>
+      <SectionHeader icon="🚛" title={t("Containers")} accent="#0ea5e9" />
+      {Object.values(byContainer).map(({ container: c, items: cItems }) => c && (
+        <div key={c.id} style={{ background: "#f0f9ff", borderRadius: 8, padding: 10, marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontWeight: 600, fontSize: 12, color: "#0369a1", fontFamily: "'DM Mono',monospace" }}>{c.container_no || c.booking_no || "—"}</span>
+            <span style={{ fontSize: 11, color: "#64748b" }}>{c.vessel || ""} · {c.carrier || ""} · ETD {c.etd || "—"}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#475569" }}>
+            {cItems.map(it => (
+              <div key={it.id} style={{ display: "flex", gap: 12, padding: "2px 0" }}>
+                <span>{tSupplier(it.supplier) || "—"}</span>
+                <span style={{ color: "#94a3b8" }}>·</span>
+                <span>{it.tuc || "—"}</span>
+                <span style={{ color: "#94a3b8" }}>·</span>
+                <span>{it.qty || "—"} pcs</span>
+                <span style={{ color: "#94a3b8" }}>·</span>
+                <span>{it.volume || "—"} m³</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase.js";
 import { ShipmentsPage } from "./pages/Shipments.jsx";
+import { ContainersPage } from "./pages/Containers.jsx";
 import { CustomersPage } from "./pages/Customers.jsx";
 import { KnowledgePage } from "./pages/Knowledge.jsx";
 import { ManagePage } from "./pages/Manage.jsx";
@@ -110,6 +111,7 @@ export default function App() {
   const role = user.profile?.role || "operator";
   const navItems = [
     { key: "shipments", icon: "📦", label: t("Shipments") },
+    { key: "containers", icon: "🚛", label: t("Containers") },
     { key: "logs",      icon: "📋", label: t("Audit Log") },
     { key: "suppliers", icon: "🏭", label: t("Suppliers") },
     { key: "customers", icon: "🤝", label: t("Customers") },
@@ -169,6 +171,7 @@ export default function App() {
         {/* Main */}
         <div style={{ flex: 1, padding: 20, overflowX: "auto" }}>
           {(view === "shipments" || view === "logs") && <ShipmentsPage user={user} view={view} setView={setView} statFilter={statFilter} />}
+          {view === "containers" && <ContainersPage user={user} />}
           {view === "customers" && <CustomersPage user={user} />}
           {view === "suppliers" && <KnowledgePage user={user} defaultTab="supplier" supplierOnly />}
           {view === "knowledge" && <KnowledgePage user={user} />}
