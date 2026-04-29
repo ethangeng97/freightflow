@@ -972,17 +972,23 @@ function ShipmentLoadingFromContainers({ order, role }) {
 
   useEffect(() => {
     (async () => {
-      // Find container_items matching this shipment's PO or customer_po
-      const queries = [];
-      if (order.po) queries.push(supabase.from("container_items").select("*").eq("po", order.po));
-      if (order.customer_po) queries.push(supabase.from("container_items").select("*").eq("customer_po", String(order.customer_po)));
-      const results = await Promise.all(queries);
-      const seen = new Set();
-      const allItems = [];
-      for (const r of results) {
-        for (const item of (r.data || [])) {
-          if (!seen.has(item.id)) { seen.add(item.id); allItems.push(item); }
-        }
+      // Find container_items matching this shipment by PO + Customer PO (AND)
+      let allItems = [];
+      if (order.po && order.customer_po) {
+        // Both fields: AND match
+        const { data } = await supabase.from("container_items").select("*")
+          .eq("po", order.po).eq("customer_po", String(order.customer_po));
+        allItems = data || [];
+      } else if (order.customer_po) {
+        // Only customer_po
+        const { data } = await supabase.from("container_items").select("*")
+          .eq("customer_po", String(order.customer_po));
+        allItems = data || [];
+      } else if (order.po) {
+        // Only po (fallback)
+        const { data } = await supabase.from("container_items").select("*")
+          .eq("po", order.po);
+        allItems = data || [];
       }
       setItems(allItems);
 
