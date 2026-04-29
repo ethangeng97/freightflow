@@ -729,7 +729,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const emptyRow = { po: shipment.po || "", sku: "", tuc: "", hs_code: "", booked_packages: "", packing_unit: "CTNS", booked_weight: "", booked_volume: "", marks: "", booking_no: "", container_no: "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
+  const emptyRow = { po: shipment.po || "", customer_po: shipment.customer_po || "", sku: "", tuc: "", hs_code: "", booked_packages: "", packing_unit: "CTNS", booked_weight: "", booked_volume: "", marks: "", booking_no: "", container_no: "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("sort_order").order("created_at");
@@ -745,12 +745,15 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     setSaving(false); load();
   };
 
-  const updateCell = async (id, field, value) => {
+  const updateLocal = (id, field, value) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: value } : it));
+  };
+
+  const saveCell = async (id, field, value) => {
     const numFields = ["booked_packages", "actual_packages", "booked_weight", "actual_weight", "booked_volume", "actual_volume"];
-    const v = numFields.includes(field) ? (value ? Number(value) : null) : value;
-    await supabase.from("loading_details").update({ [field]: v }).eq("id", id);
-    // Update local state immediately for responsiveness
-    setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: v } : it));
+    const v = numFields.includes(field) ? (value === "" || value == null ? null : Number(value)) : (value === "" ? null : value);
+    const { error } = await supabase.from("loading_details").update({ [field]: v }).eq("id", id);
+    if (error) console.error("Save error:", error.message);
   };
 
   const deleteRow = async (id) => {
@@ -791,36 +794,44 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
               <thead><tr style={{ background: "#f0f9ff" }}>
-                {["PO", "SKU", t("TUC"), "HS Code", t("件数"), t("包装"), t("毛重 KGS"), t("体积 CBM"), t("唛头"), t("Booking"), t("柜号"), t("箱型"), t("委托方"), ""].map(h =>
+                {["PO", "Customer PO", "SKU", t("TUC"), "HS Code", t("件数"), t("包装"), t("毛重 KGS"), t("体积 CBM"), t("唛头"), t("Booking"), t("柜号"), t("箱型"), t("委托方"), ""].map(h =>
                   <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#0369a1", fontSize: 10, borderBottom: "2px solid #bae6fd", whiteSpace: "nowrap" }}>{h}</th>
                 )}
               </tr></thead>
               <tbody>
-                {items.map((it, i) => (
-                  <tr key={it.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 90 }} value={it.po || ""} onChange={e => updateCell(it.id, "po", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 100 }} value={it.sku || ""} onChange={e => updateCell(it.id, "sku", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 140 }} value={it.tuc || ""} onChange={e => updateCell(it.id, "tuc", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 90 }} value={it.hs_code || ""} onChange={e => updateCell(it.id, "hs_code", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={inputStyleSm} type="number" value={it.booked_packages ?? ""} onChange={e => updateCell(it.id, "booked_packages", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 50 }} value={it.packing_unit || "CTNS"} onChange={e => updateCell(it.id, "packing_unit", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={inputStyleSm} type="number" step="0.01" value={it.booked_weight ?? ""} onChange={e => updateCell(it.id, "booked_weight", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={inputStyleSm} type="number" step="0.01" value={it.booked_volume ?? ""} onChange={e => updateCell(it.id, "booked_volume", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 70 }} value={it.marks || ""} onChange={e => updateCell(it.id, "marks", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 100 }} value={it.booking_no || ""} onChange={e => updateCell(it.id, "booking_no", e.target.value)} /></td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 80 }} value={it.container_no || ""} onChange={e => updateCell(it.id, "container_no", e.target.value)} /></td>
-                    <td style={cellStyle}>
-                      <select value={it.container_type || "40HQ"} onChange={e => updateCell(it.id, "container_type", e.target.value)} style={{ ...inputStyle, width: 65 }}>
-                        {["20GP","40GP","40HQ","45HQ","20RF","40RF"].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </td>
-                    <td style={cellStyle}><input style={{ ...inputStyle, width: 80 }} value={it.supplier || ""} onChange={e => updateCell(it.id, "supplier", e.target.value)} /></td>
-                    <td style={cellStyle}><button onClick={() => deleteRow(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button></td>
-                  </tr>
-                ))}
+                {items.map((it, i) => {
+                  const cell = (field, w, opts) => {
+                    const type = opts?.type || "text";
+                    const step = opts?.step;
+                    return <td style={cellStyle}><input style={{ ...(opts?.sm ? inputStyleSm : inputStyle), width: w }} type={type} step={step} value={it[field] ?? ""} onChange={e => updateLocal(it.id, field, e.target.value)} onBlur={e => saveCell(it.id, field, e.target.value)} /></td>;
+                  };
+                  return (
+                    <tr key={it.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      {cell("po", 90)}
+                      {cell("customer_po", 85)}
+                      {cell("sku", 100)}
+                      {cell("tuc", 140)}
+                      {cell("hs_code", 90)}
+                      {cell("booked_packages", 70, { type: "number", sm: true })}
+                      {cell("packing_unit", 50)}
+                      {cell("booked_weight", 70, { type: "number", step: "0.01", sm: true })}
+                      {cell("booked_volume", 70, { type: "number", step: "0.01", sm: true })}
+                      {cell("marks", 70)}
+                      {cell("booking_no", 100)}
+                      {cell("container_no", 80)}
+                      <td style={cellStyle}>
+                        <select value={it.container_type || "40HQ"} onChange={e => { updateLocal(it.id, "container_type", e.target.value); saveCell(it.id, "container_type", e.target.value); }} style={{ ...inputStyle, width: 65 }}>
+                          {["20GP","40GP","40HQ","45HQ","20RF","40RF"].map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      </td>
+                      {cell("supplier", 80)}
+                      <td style={cellStyle}><button onClick={() => deleteRow(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button></td>
+                    </tr>
+                  );
+                })}
                 {items.length > 0 && (
                   <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
-                    <td colSpan={4} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
+                    <td colSpan={5} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
                     <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.pkgs}</td>
                     <td />
                     <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(2)}</td>

@@ -158,11 +158,14 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
     loadItems();
   };
 
-  const handleUpdateItem = async (itemId, field, value) => {
+  const updateItemLocal = (itemId, field, value) => {
+    setItems(prev => prev.map(it => it.id === itemId ? { ...it, [field]: value } : it));
+  };
+
+  const saveItemCell = async (itemId, field, value) => {
     const numFields = ["qty", "weight", "volume"];
-    const v = numFields.includes(field) ? (value ? Number(value) : null) : value;
+    const v = numFields.includes(field) ? (value === "" || value == null ? null : Number(value)) : (value === "" ? null : value);
     await supabase.from("container_items").update({ [field]: v }).eq("id", itemId);
-    setItems(prev => prev.map(it => it.id === itemId ? { ...it, [field]: v } : it));
   };
 
   const addEmptyRow = async () => {
@@ -287,17 +290,22 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
                   {items.map((it) => {
                     const cs = { padding: "3px 2px" };
                     const is_ = { width: "100%", padding: "4px 6px", border: "1px solid #fde68a", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace", background: canEdit ? "#fffbeb" : "transparent" };
+                    const cell = (field, w, opts) => {
+                      const type = opts?.type || "text";
+                      const step = opts?.step;
+                      return <td style={cs}><input style={{ ...is_, width: w, ...(opts?.align ? { textAlign: opts.align } : {}) }} type={type} step={step} value={it[field] ?? ""} readOnly={!canEdit} onChange={e => updateItemLocal(it.id, field, e.target.value)} onBlur={e => saveItemCell(it.id, field, e.target.value)} /></td>;
+                    };
                     return (
                       <tr key={it.id} style={{ borderBottom: "1px solid #fef3c7" }}>
-                        <td style={cs}><input style={{ ...is_, width: 90 }} value={it.supplier || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "supplier", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 90 }} value={it.po || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "po", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 80 }} value={it.customer_po || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "customer_po", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 140 }} value={it.tuc || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "tuc", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 90, fontSize: 10 }} value={it.sku || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "sku", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" value={it.qty ?? ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "qty", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 65, textAlign: "right" }} type="number" step="0.01" value={it.weight ?? ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "weight", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" step="0.01" value={it.volume ?? ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "volume", e.target.value)} /></td>
-                        <td style={cs}><input style={{ ...is_, width: 80 }} value={it.hbl || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "hbl", e.target.value)} /></td>
+                        {cell("supplier", 90)}
+                        {cell("po", 90)}
+                        {cell("customer_po", 80)}
+                        {cell("tuc", 140)}
+                        {cell("sku", 90)}
+                        {cell("qty", 60, { type: "number", align: "right" })}
+                        {cell("weight", 65, { type: "number", step: "0.01", align: "right" })}
+                        {cell("volume", 60, { type: "number", step: "0.01", align: "right" })}
+                        {cell("hbl", 80)}
                         <td style={cs}>
                           {canEdit && <button onClick={() => handleDeleteItem(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button>}
                         </td>

@@ -5,6 +5,7 @@
 
 -- Add new columns to existing loading_details table
 alter table public.loading_details add column if not exists po text;
+alter table public.loading_details add column if not exists customer_po text;
 alter table public.loading_details add column if not exists sku text;
 alter table public.loading_details add column if not exists tuc text;
 alter table public.loading_details add column if not exists hs_code text;
