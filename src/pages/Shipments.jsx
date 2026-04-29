@@ -27,7 +27,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" });
+  const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", carrier: "All", entry_done: "All" });
   const [textFilters, setTextFilters] = useState({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
   const [checkedIds, setCheckedIds] = useState(new Set());
   const [pageSize, setPageSize] = useState(50);
@@ -38,7 +38,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   useEffect(() => {
     if (statFilter && statFilter !== statFilterApplied.current) {
       statFilterApplied.current = statFilter;
-      const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" };
+      const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", carrier: "All", entry_done: "All" };
       if (statFilter.entry_done) {
         base.entry_done = statFilter.entry_done;
       } else {
@@ -99,6 +99,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
 
   // Filtered list
   const customerList = useMemo(() => [...new Set(shipments.map(o => o.customer).filter(Boolean))], [shipments]);
+  const carrierList = useMemo(() => [...new Set(shipments.map(o => o.carrier).filter(Boolean))].sort(), [shipments]);
   const filtered = useMemo(() => shipments.filter((o) => {
     for (const key of Object.keys(STATUS_CONFIGS)) {
       if (filters[key] === "All") continue;
@@ -106,6 +107,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
       else if (o[key] !== filters[key]) return false;
     }
     if (filters.customer !== "All" && o.customer !== filters.customer) return false;
+    if (filters.carrier !== "All" && o.carrier !== filters.carrier) return false;
     if (filters.entry_done === "已录入" && !o.entry_done) return false;
     if (filters.entry_done === "未录入" && o.entry_done) return false;
     if (textFilters.booking_no && !(o.booking_no || "").toLowerCase().includes(textFilters.booking_no.toLowerCase())) return false;
@@ -132,7 +134,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
     Object.values(textFilters).filter(v => v).length +
     (search ? 1 : 0);
   const clearFilters = () => {
-    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" });
+    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", carrier: "All", entry_done: "All" });
     setTextFilters({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
     setSearch("");
   };
@@ -253,7 +255,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
             role={role} search={search} setSearch={setSearch}
             filters={filters} setFilters={setFilters}
             textFilters={textFilters} setTextFilters={setTextFilters}
-            customerList={customerList}
+            customerList={customerList} carrierList={carrierList}
             activeFilterCount={activeFilterCount} clearFilters={clearFilters}
           />
 
@@ -325,7 +327,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
 // =========================================================================
 // Filter Bar
 // =========================================================================
-function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, setTextFilters, customerList, activeFilterCount, clearFilters }) {
+function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, setTextFilters, customerList, carrierList, activeFilterCount, clearFilters }) {
   const masked = maskedFields(role);
   return (
     <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "12px 14px", marginBottom: 14 }}>
@@ -340,6 +342,7 @@ function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, 
           <FilterDropdown label={t("Entry")} value={filters.entry_done} options={["已录入", "未录入"]} onChange={v => setFilters(p => ({ ...p, entry_done: v }))} />}
         {!masked.has("customer") &&
           <FilterDropdown label="Customer" value={filters.customer} options={customerList} onChange={v => setFilters(p => ({ ...p, customer: v }))} />}
+        <FilterDropdown label="Carrier" value={filters.carrier} options={carrierList} onChange={v => setFilters(p => ({ ...p, carrier: v }))} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
         {[
