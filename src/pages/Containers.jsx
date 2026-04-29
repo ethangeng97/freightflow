@@ -43,9 +43,7 @@ export function ContainersPage({ user }) {
 
   const selected = containers.find(c => c.id === selectedId);
 
-  const handleCreate = async (data) => {
-    const { error } = await supabase.from("containers").insert(data);
-    if (error) { alert(error.message); return; }
+  const handleCreate = async () => {
     setShowNew(false);
     load();
   };
@@ -360,46 +358,205 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
 }
 
 // =========================================================================
-// New Container Modal
+// New Container Modal — PO-first flow
 // =========================================================================
 function NewContainerModal({ types, onClose, onSave }) {
-  const [form, setForm] = useState({ container_no: "", booking_no: "", e_booking_no: "", vessel: "", carrier: "", carrier_agent: "", pol: "", pod: "", etd: "", eta: "", qty_container: "", type_id: "", customer: "", notes: "" });
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const submit = () => {
-    const data = { ...form };
-    if (!data.type_id) delete data.type_id;
-    if (!data.etd) delete data.etd;
-    if (!data.eta) delete data.eta;
-    onSave(data);
+  const [shipments, setShipments] = useState([]);
+  const [poSearch, setPoSearch] = useState("");
+  const [lines, setLines] = useState([]); // loading items
+  const [containerNo, setContainerNo] = useState("");
+  const [sealNo, setSealNo] = useState("");
+  const [typeId, setTypeId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    supabase.from("shipments").select("id,po,customer_po,tuc,sku,supplier,customer,end_customer,qty_packages,weight,volume,booking_no,e_booking_no,vessel,carrier,carrier_agent,pol,pod,etd,eta")
+      .order("created_at", { ascending: false }).then(({ data }) => setShipments(data || []));
+  }, []);
+
+  // Derived container-level info from first line that has it
+  const derived = useMemo(() => {
+    const d = { booking_no: "", e_booking_no: "", vessel: "", carrier: "", carrier_agent: "", pol: "", pod: "", etd: "", eta: "", customer: "" };
+    for (const ln of lines) {
+      if (!d.booking_no && ln._src?.booking_no) d.booking_no = ln._src.booking_no;
+      if (!d.e_booking_no && ln._src?.e_booking_no) d.e_booking_no = ln._src.e_booking_no;
+      if (!d.vessel && ln._src?.vessel) d.vessel = ln._src.vessel;
+      if (!d.carrier && ln._src?.carrier) d.carrier = ln._src.carrier;
+      if (!d.carrier_agent && ln._src?.carrier_agent) d.carrier_agent = ln._src.carrier_agent;
+      if (!d.pol && ln._src?.pol) d.pol = ln._src.pol;
+      if (!d.pod && ln._src?.pod) d.pod = ln._src.pod;
+      if (!d.etd && ln._src?.etd) d.etd = ln._src.etd;
+      if (!d.eta && ln._src?.eta) d.eta = ln._src.eta;
+      if (!d.customer && ln._src?.customer) d.customer = ln._src.customer;
+    }
+    return d;
+  }, [lines]);
+
+  const poFiltered = useMemo(() => {
+    if (!poSearch || poSearch.length < 1) return [];
+    const q = poSearch.toLowerCase();
+    return shipments.filter(s =>
+      (s.po || "").toLowerCase().includes(q) ||
+      (s.customer_po || "").toLowerCase().includes(q) ||
+      (s.tuc || "").toLowerCase().includes(q)
+    ).slice(0, 15);
+  }, [poSearch, shipments]);
+
+  const addFromShipment = (s) => {
+    setLines(prev => [...prev, {
+      supplier: s.supplier || "", po: s.po || "", customer_po: s.customer_po || "",
+      tuc: s.tuc || "", sku: s.sku || "", hs_code: "", qty: s.qty_packages || "",
+      packing_unit: "CTNS", weight: s.weight || "", volume: s.volume || "",
+      hbl: "", shipment_id: s.id, _src: s,
+    }]);
+    setPoSearch("");
   };
+
+  const addEmptyLine = () => {
+    setLines(prev => [...prev, { supplier: "", po: "", customer_po: "", tuc: "", sku: "", hs_code: "", qty: "", packing_unit: "CTNS", weight: "", volume: "", hbl: "", _src: {} }]);
+  };
+
+  const updateLine = (idx, field, value) => {
+    setLines(prev => prev.map((ln, i) => i === idx ? { ...ln, [field]: value } : ln));
+  };
+
+  const removeLine = (idx) => {
+    setLines(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const submit = async () => {
+    if (lines.length === 0) { alert(t("请至少添加一行装柜明细")); return; }
+    setSaving(true);
+    // Create container
+    const cData = {
+      container_no: containerNo || null, seal_no: sealNo || null, type_id: typeId || null, notes: notes || null,
+      booking_no: derived.booking_no || null, e_booking_no: derived.e_booking_no || null,
+      vessel: derived.vessel || null, carrier: derived.carrier || null, carrier_agent: derived.carrier_agent || null,
+      pol: derived.pol || null, pod: derived.pod || null, customer: derived.customer || null,
+      etd: derived.etd || null, eta: derived.eta || null,
+    };
+    if (!cData.type_id) delete cData.type_id;
+    if (!cData.etd) delete cData.etd;
+    if (!cData.eta) delete cData.eta;
+    const { data: created, error } = await supabase.from("containers").insert(cData).select("id").single();
+    if (error || !created) { alert("Error: " + (error?.message || "Failed")); setSaving(false); return; }
+    // Create items
+    const items = lines.map((ln, i) => ({
+      container_id: created.id, shipment_id: ln.shipment_id || null,
+      supplier: ln.supplier || null, po: ln.po || null, customer_po: ln.customer_po || null,
+      tuc: ln.tuc || null, sku: ln.sku || null,
+      qty: ln.qty ? Number(ln.qty) : null, weight: ln.weight ? Number(ln.weight) : null, volume: ln.volume ? Number(ln.volume) : null,
+      hbl: ln.hbl || null, sort_order: i,
+    }));
+    const { error: itemErr } = await supabase.from("container_items").insert(items);
+    if (itemErr) alert("Items error: " + itemErr.message);
+    setSaving(false);
+    onSave();
+  };
+
+  const totals = lines.reduce((t, ln) => ({ qty: t.qty + (Number(ln.qty) || 0), wt: t.wt + (Number(ln.weight) || 0), vol: t.vol + (Number(ln.volume) || 0) }), { qty: 0, wt: 0, vol: 0 });
+  const supplierCount = new Set(lines.map(l => l.supplier).filter(Boolean)).size;
+  const autoType = supplierCount > 1 || lines.length > 1 ? "Console Box" : "FCL";
+
+  const is_ = { padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" };
+
   return (
-    <Modal onClose={onClose} title={t("New Container")} width={700}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-        <Input label={t("Container No")} value={form.container_no} onChange={e => set("container_no", e.target.value)} />
-        <Input label={t("Booking No")} value={form.booking_no} onChange={e => set("booking_no", e.target.value)} />
-        <Input label={t("E-Booking No")} value={form.e_booking_no} onChange={e => set("e_booking_no", e.target.value)} />
-        <Input label={t("Vessel")} value={form.vessel} onChange={e => set("vessel", e.target.value)} />
-        <Input label={t("Carrier")} value={form.carrier} onChange={e => set("carrier", e.target.value)} />
-        <Input label={t("Agent")} value={form.carrier_agent} onChange={e => set("carrier_agent", e.target.value)} />
-        <Input label="POL" value={form.pol} onChange={e => set("pol", e.target.value)} />
-        <Input label="POD" value={form.pod} onChange={e => set("pod", e.target.value)} />
-        <Input label="ETD" type="date" value={form.etd} onChange={e => set("etd", e.target.value)} />
-        <Input label="ETA" type="date" value={form.eta} onChange={e => set("eta", e.target.value)} />
-        <Input label={t("QTY (Container)")} value={form.qty_container} onChange={e => set("qty_container", e.target.value)} />
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("Type")}</div>
-          <select value={form.type_id} onChange={e => set("type_id", e.target.value)} style={{ width: "100%", padding: "7px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none" }}>
-            <option value="">—</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+    <Modal onClose={onClose} title={t("New Container")} width={1050}>
+      {/* Step 1: Add PO lines */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 6 }}>1. {t("添加装柜明细")} — {t("搜索 PO / Customer PO / 品名...")}</div>
+        <div style={{ position: "relative" }}>
+          <input value={poSearch} onChange={e => setPoSearch(e.target.value)} placeholder={t("输入 PO 或 Customer PO 搜索...")}
+            style={{ width: "100%", padding: "8px 12px", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, outline: "none", background: "#f0f9ff", boxSizing: "border-box" }} />
+          {poFiltered.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              {poFiltered.map(s => (
+                <div key={s.id} onClick={() => addFromShipment(s)} style={{ padding: "6px 12px", cursor: "pointer", fontSize: 11, borderBottom: "1px solid #f1f5f9", display: "flex", gap: 12 }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f0f9ff"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <span style={{ fontWeight: 600, color: "#0369a1", fontFamily: "'DM Mono',monospace", minWidth: 100 }}>{s.po}</span>
+                  <span style={{ fontFamily: "'DM Mono',monospace", minWidth: 80, color: "#64748b" }}>{s.customer_po}</span>
+                  <span style={{ color: "#0f172a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tuc || "—"}</span>
+                  <span style={{ color: "#94a3b8" }}>{tSupplier(s.supplier) || ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <Input label={t("Customer")} value={form.customer} onChange={e => set("customer", e.target.value)} />
       </div>
-      <div style={{ marginTop: 10 }}>
-        <Input label={t("Notes")} value={form.notes} onChange={e => set("notes", e.target.value)} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+
+      {/* Lines table */}
+      {lines.length > 0 && (
+        <div style={{ overflowX: "auto", marginBottom: 14 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead><tr style={{ background: "#f0f9ff" }}>
+              {[t("Supplier"), "PO", "Cust PO", t("TUC"), "HS Code", "QTY", t("包装"), t("Weight"), "CBM", "HBL", ""].map(h =>
+                <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#0369a1", fontSize: 10, borderBottom: "2px solid #bae6fd", whiteSpace: "nowrap" }}>{h}</th>
+              )}
+            </tr></thead>
+            <tbody>
+              {lines.map((ln, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 85 }} value={ln.supplier} onChange={e => updateLine(i, "supplier", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 90, fontWeight: 600, color: "#0369a1" }} value={ln.po} onChange={e => updateLine(i, "po", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 75 }} value={ln.customer_po} onChange={e => updateLine(i, "customer_po", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 130 }} value={ln.tuc} onChange={e => updateLine(i, "tuc", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 80 }} value={ln.hs_code || ""} onChange={e => updateLine(i, "hs_code", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" value={ln.qty} onChange={e => updateLine(i, "qty", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 45 }} value={ln.packing_unit} onChange={e => updateLine(i, "packing_unit", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" step="0.01" value={ln.weight} onChange={e => updateLine(i, "weight", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" step="0.01" value={ln.volume} onChange={e => updateLine(i, "volume", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 75 }} value={ln.hbl || ""} onChange={e => updateLine(i, "hbl", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><button onClick={() => removeLine(i)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button></td>
+                </tr>
+              ))}
+              <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
+                <td colSpan={5} style={{ padding: "6px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
+                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.qty}</td>
+                <td />
+                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(1)}</td>
+                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(2)}</td>
+                <td colSpan={2} />
+              </tr>
+            </tbody>
+          </table>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+            <Button small variant="secondary" onClick={addEmptyLine}>+ {t("手动添加行")}</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Container info — auto-derived + manual fields */}
+      {lines.length > 0 && (
+        <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, border: "1px solid #e2e8f0", marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 8 }}>2. {t("柜子信息")} <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400 }}>({autoType})</span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+            <Input label={t("Container No")} value={containerNo} onChange={e => setContainerNo(e.target.value)} />
+            <Input label={t("Seal No")} value={sealNo} onChange={e => setSealNo(e.target.value)} />
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("Type")}</div>
+              <select value={typeId} onChange={e => setTypeId(e.target.value)} style={{ width: "100%", padding: "7px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none" }}>
+                <option value="">—</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <Input label={t("Notes")} value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginTop: 8 }}>
+            <Field label="Booking" value={derived.booking_no || "—"} />
+            <Field label="Vessel" value={derived.vessel || "—"} />
+            <Field label="Carrier" value={derived.carrier || "—"} />
+            <Field label="Agent" value={derived.carrier_agent || "—"} />
+            <Field label="POL" value={derived.pol || "—"} />
+            <Field label="POD" value={derived.pod || "—"} />
+            <Field label="ETD" value={derived.etd || "—"} />
+            <Field label="Customer" value={derived.customer || "—"} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
-        <Button onClick={submit}>{t("Save")}</Button>
+        <Button onClick={submit} disabled={saving || lines.length === 0}>{saving ? "..." : t("Save")}</Button>
       </div>
     </Modal>
   );
