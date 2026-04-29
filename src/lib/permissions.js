@@ -13,7 +13,7 @@ export const isCustomer = (u) => u?.profile?.role === "customer";
 export function maskedFields(role) {
   if (role === "operator") return new Set(["customer", "end_customer"]);
   if (role === "sales")    return new Set(["end_customer"]);
-  if (role === "customer") return new Set(["end_customer"]); // safety; customer sees their own line only
+  if (role === "customer") return new Set(); // customer sees their own shipments including end_customer
   return new Set();
 }
 

@@ -51,7 +51,7 @@ function UsersTab({ user }) {
 
   const load = useCallback(async () => {
     const [{ data: u }, { data: c }] = await Promise.all([
-      supabase.from("user_profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("user_profiles_view").select("*").order("created_at", { ascending: false }),
       supabase.from("customers").select("id,name").order("name"),
     ]);
     setUsers(u || []); setCustomers(c || []); setLoading(false);
@@ -129,7 +129,7 @@ function AssignmentsTab() {
 
   const load = useCallback(async () => {
     const [{ data: u }, { data: c }, { data: a }] = await Promise.all([
-      supabase.from("user_profiles").select("*").eq("role", "sales").order("email"),
+      supabase.from("user_profiles_view").select("*").eq("role", "sales").order("email"),
       supabase.from("customers").select("id,name").order("name"),
       supabase.from("sales_customers").select("*"),
     ]);
