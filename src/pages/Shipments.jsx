@@ -924,11 +924,7 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
   const previewCols = rows.length > 0 ? Object.keys(rows[0]) : [];
 
   return (
-    <Modal onClose={onClose} title={t("Import")} width={900}
-      footer={<div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
-        {rows.length > 0 && !result && <Button onClick={doImport} disabled={importing}>{importing ? "..." : `${t("Import")} ${rows.length} ${t("条")}`}</Button>}
-      </div>}>
+    <Modal onClose={onClose} title={t("Import")} width={900}>
 
       {!rows.length && !dupes.length && (
         <div style={{ padding: "30px 0", textAlign: "center" }}>
@@ -977,6 +973,13 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
             </table>
           </div>
         </>
+      )}
+
+      {rows.length > 0 && !result && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
+          <Button variant="secondary" onClick={onClose}>取消</Button>
+          <Button onClick={doImport} disabled={importing}>{importing ? "导入中..." : `确认导入 ${rows.length} 条`}</Button>
+        </div>
       )}
     </Modal>
   );
