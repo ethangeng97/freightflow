@@ -41,4 +41,5 @@ export const FIELD_LABELS = {
   booking_no: "Booking No", pol: "POL", pod: "POD", carrier: "Carrier",
   etd: "ETD", qty_container: "QTY (Container)", eta: "ETA", vessel: "Vessel",
   carrier_agent: "Agent", container_no: "Container No", bl_status: "B/L Status",
+  entry_done: "Entry Status", entry_number: "Entry Number",
 };

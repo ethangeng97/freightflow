@@ -7,11 +7,10 @@ import { ManagePage } from "./pages/Manage.jsx";
 import { canAccessPage } from "./lib/permissions.js";
 import { t, setI18nRole } from "./lib/i18n.js";
 
-const FobcargoLogo = ({ size = 30 }) => (
+const BansarLogo = ({ size = 30 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-    <rect x="6" y="6" width="88" height="88" rx="22" fill="#0c1222" />
-    <path d="M30 38 L50 26 L70 38 L70 62 L50 74 L30 62 Z" stroke="#0ea5e9" strokeWidth="3.2" fill="none" strokeLinejoin="round" />
-    <text x="50" y="58" textAnchor="middle" fill="#f8fafc" fontSize="22" fontWeight="700" fontFamily="DM Sans, system-ui, sans-serif">F</text>
+    <rect x="6" y="6" width="88" height="88" rx="22" fill="#1a365d" />
+    <text x="50" y="62" textAnchor="middle" fill="#f8fafc" fontSize="36" fontWeight="700" fontFamily="DM Sans, system-ui, sans-serif">B</text>
   </svg>
 );
 
@@ -40,8 +39,8 @@ function LoginPage({ onLogin }) {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg, #0c1222 0%, #1a2332 50%, #0c1222 100%)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <div style={{ width: 380, padding: 40, background: "#fff", borderRadius: 16, boxShadow: "0 25px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-          <FobcargoLogo size={42} />
-          <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5, color: "#0f172a" }}>Fobcargo</span>
+          <BansarLogo size={42} />
+          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5, color: "#0f172a" }}>Bansar Group Portal</span>
         </div>
         <div style={{ marginBottom: 18 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>Email</label>
@@ -68,7 +67,7 @@ function LoginPage({ onLogin }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState("shipments"); // shipments | logs | customers | knowledge | manage
-  const [stats, setStats] = useState({ total: 0, qcPending: 0, paymentDue: 0, telexPending: 0, blPending: 0 });
+  const [stats, setStats] = useState({ total: 0, qcPending: 0, paymentDue: 0, telexPending: 0, blPending: 0, entryPending: 0 });
   const [bootstrapping, setBootstrapping] = useState(true);
 
   // Restore session on mount (Supabase wrapper persists tokens)
@@ -91,7 +90,7 @@ export default function App() {
   // Stats sidebar (re-loaded when on shipments view)
   const refreshStats = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase.from("shipments").select("qc_status,local_payment,telex_release,bl_status");
+    const { data } = await supabase.from("shipments").select("qc_status,local_payment,telex_release,bl_status,entry_done");
     const arr = data || [];
     setStats({
       total: arr.length,
@@ -99,6 +98,7 @@ export default function App() {
       paymentDue: arr.filter(o => o.local_payment === "Waiting").length,
       telexPending: arr.filter(o => o.telex_release === "Pending").length,
       blPending: arr.filter(o => o.bl_status !== "Done").length,
+      entryPending: arr.filter(o => !o.entry_done).length,
     });
   }, [user]);
   useEffect(() => { refreshStats(); }, [refreshStats, view]);
@@ -121,7 +121,7 @@ export default function App() {
 
       {/* Top Bar */}
       <div style={{ background: "#0c1222", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><FobcargoLogo size={32} /><span style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, letterSpacing: -0.3 }}>Fobcargo</span></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><BansarLogo size={32} /><span style={{ color: "#e2e8f0", fontSize: 15, fontWeight: 700, letterSpacing: -0.3 }}>Bansar Group Portal</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ color: "#94a3b8", fontSize: 12 }}>{user.email}</span>
           <span style={{ padding: "3px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase", background: roleBadge(role).bg, color: roleBadge(role).fg }}>{role}</span>
@@ -149,8 +149,9 @@ export default function App() {
                   { l: t("Total"),         v: stats.total,        c: "#0ea5e9" },
                   { l: t("QC Pending"),    v: stats.qcPending,    c: "#f59e0b" },
                   { l: t("Payment Due"),   v: stats.paymentDue,   c: "#ef4444" },
-                  { l: "Telex Pending", v: stats.telexPending, c: "#8b5cf6" },
-                  { l: "B/L Pending",   v: stats.blPending,    c: "#0891b2" },
+                  { l: t("Telex Pending"), v: stats.telexPending, c: "#8b5cf6" },
+                  { l: t("B/L Pending"),   v: stats.blPending,    c: "#0891b2" },
+                  { l: t("Entry Pending"), v: stats.entryPending, c: "#d946ef" },
                 ].map(s => (
                   <div key={s.l} style={{ padding: "8px 10px", borderRadius: 7, background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{s.l}</span>

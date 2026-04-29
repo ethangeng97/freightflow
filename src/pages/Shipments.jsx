@@ -121,10 +121,17 @@ export function ShipmentsPage({ user, view, setView }) {
     if (oldV === newV) return;
     const { error } = await supabase.from("shipments").update({ [field]: newV }).eq("id", sid);
     if (error) { alert(error.message); return; }
+    // Humanize values for audit log
+    const humanize = (field, val) => {
+      if (val === true) return "✓ 是";
+      if (val === false) return "✗ 否";
+      if (val === null || val === undefined || val === "") return "—";
+      return String(val);
+    };
     await supabase.from("audit_logs").insert({
       shipment_id: sid, user_id: user.id, user_email: user.email,
       field_name: FIELD_LABELS[field] || field,
-      old_value: oldV || "", new_value: newV || "",
+      old_value: humanize(field, oldV), new_value: humanize(field, newV),
     });
     loadShipments(); loadLogs();
   };
@@ -726,7 +733,7 @@ function exportToCSV(rows, role, columns) {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `Fobcargo_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `Bansar_Export_${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
 }
 

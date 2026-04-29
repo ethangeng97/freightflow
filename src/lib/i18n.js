@@ -109,7 +109,9 @@ const zh = {
   "Total": "总计",
   "QC Pending": "质检待定",
   "Payment Due": "待付款",
-  "Space Booked": "已订舱",
+  "Telex Pending": "待电放",
+  "B/L Pending": "待签单",
+  "Entry Pending": "待录单",
   "Overview": "概览",
 };
 
