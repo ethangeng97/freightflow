@@ -861,13 +861,21 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
   };
 
   const parseCSV = (text) => {
-    const lines = text.split("\n").filter(l => l.trim());
+    const lines = text.replace(/\r/g, "").split("\n").filter(l => l.trim());
     if (lines.length < 2) return [];
     const rawHeaders = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
     const headers = rawHeaders.map(h => FIELD_MAP[h.toLowerCase()] || null);
     const data = [];
     for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].match(/("([^"]*)"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, "").trim()) || [];
+      // Simple CSV split — handles quoted fields with commas
+      const vals = [];
+      let cur = "", inQ = false;
+      for (const ch of lines[i]) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ""; }
+        else { cur += ch; }
+      }
+      vals.push(cur.trim());
       const row = {};
       headers.forEach((h, idx) => { if (h && vals[idx]) row[h] = vals[idx]; });
       if (Object.keys(row).length > 0) data.push(row);
