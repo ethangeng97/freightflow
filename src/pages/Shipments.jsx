@@ -6,6 +6,7 @@ import { NotesPanel } from "../components/NotesPanel.jsx";
 import { STATUS_CONFIGS, FIELD_LABELS } from "../lib/constants.js";
 import { SHIPMENT_COLUMNS, COLUMN_MAP, defaultColumnConfig, reconcileColumnConfig, applyRoleMask } from "../lib/columns.jsx";
 import { isAdmin, canEditField, maskedFields } from "../lib/permissions.js";
+import { t } from "../lib/i18n.js";
 
 // =========================================================================
 // Shipments Page (entry)
@@ -182,17 +183,17 @@ export function ShipmentsPage({ user, view, setView }) {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 14 }}>
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Shipments</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{t("Shipments")}</h1>
               <p style={{ fontSize: 12, color: "#94a3b8", margin: "3px 0 0" }}>
                 {filtered.length} of {shipments.length} records
                 {activeFilterCount > 0 && <span style={{ color: "#0ea5e9", fontWeight: 600 }}> · {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active</span>}
               </p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <Button variant="secondary" onClick={() => setShowColMgr(true)}>⚙ Columns</Button>
-              <Button variant="secondary" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ Export CSV</Button>
+              <Button variant="secondary" onClick={() => setShowColMgr(true)}>⚙ {t("Columns")}</Button>
+              <Button variant="secondary" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ {t("Export CSV")}</Button>
               {(role === "admin" || role === "operator" || role === "sales") &&
-                <Button onClick={() => setShowNew(true)}>+ New Shipment</Button>}
+                <Button onClick={() => setShowNew(true)}>+ {t("New Shipment")}</Button>}
             </div>
           </div>
 
@@ -285,11 +286,11 @@ function ShipmentTable({ rows, columns, role, checkedIds, onToggleCheck, onToggl
             </th>
           )}
           {columns.map(c => (
-            <th key={c.key} style={{ padding: "10px 7px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap", minWidth: c.width || 100 }}>{c.label}</th>
+            <th key={c.key} style={{ padding: "10px 7px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap", minWidth: c.width || 100 }}>{t(c.label)}</th>
           ))}
         </tr></thead>
         <tbody>
-          {rows.length === 0 && <tr><td colSpan={columns.length + (showCheckbox ? 1 : 0)} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>No shipments found</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={columns.length + (showCheckbox ? 1 : 0)} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>{t("No shipments found")}</td></tr>}
           {rows.map((o, i) => (
             <tr key={o.id} style={{ cursor: "pointer", borderBottom: i < rows.length - 1 ? "1px solid #f1f5f9" : "none", background: checkedIds.has(o.id) ? "#f0f9ff" : "transparent" }}
               onMouseEnter={e => { if (!checkedIds.has(o.id)) e.currentTarget.style.background = "#f8fafc"; }}
@@ -347,7 +348,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
           return (
             <div key={key} style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", border: editable ? "2px solid #0ea5e9" : "1px solid #e2e8f0", flex: "1 1 140px", minWidth: 140 }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                {cfg.label}{editable && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
+                {t(cfg.label)}{editable && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
               </div>
               {editable
                 ? <select value={val || ""} onChange={e => onUpdateField(order.id, key, val, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", cursor: "pointer", color: "#0c4a6e", boxSizing: "border-box" }}>
@@ -359,12 +360,41 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
         })}
       </div>
 
+      {/* Entry status — visible to admin/operator/sales only */}
+      {role !== "customer" && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", border: canEditField(role, "entry_done") ? "2px solid #0ea5e9" : "1px solid #e2e8f0", flex: "1 1 140px", minWidth: 140 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+              {t("Entry Status")}{canEditField(role, "entry_done") && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
+            </div>
+            {canEditField(role, "entry_done")
+              ? <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#0c4a6e" }}>
+                  <input type="checkbox" checked={!!order.entry_done} onChange={e => onUpdateField(order.id, "entry_done", order.entry_done, e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
+                  {order.entry_done ? t("已录单") : t("未录单")}
+                </label>
+              : (order.entry_done ? <span style={{ color: "#16a34a", fontWeight: 600, fontSize: 12 }}>✓</span> : <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>)
+            }
+          </div>
+          {order.entry_done && (
+            <div style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", border: canEditField(role, "entry_number") ? "2px solid #0ea5e9" : "1px solid #e2e8f0", flex: "2 1 200px", minWidth: 200 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                {t("Entry Number")}{canEditField(role, "entry_number") && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
+              </div>
+              {canEditField(role, "entry_number")
+                ? <input type="text" value={order.entry_number || ""} onChange={e => onUpdateField(order.id, "entry_number", order.entry_number, e.target.value)} placeholder={t("系统编号")} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
+                : <span style={{ fontSize: 12, fontWeight: 600, fontFamily: "'DM Mono',monospace" }}>{order.entry_number || "—"}</span>
+              }
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #e2e8f0", marginBottom: 16 }}>
-        {[{ k: "overview", l: "Overview" }, ...(role === "customer" ? [] : [{ k: "history", l: "History" }]), { k: "notes", l: "Notes" }].map(t => (
-          <button key={t.k} onClick={() => setTab(t.k)} style={{
+        {[{ k: "overview", l: t("Overview") }, ...(role === "customer" ? [] : [{ k: "history", l: "History" }]), { k: "notes", l: t("Notes") }].map(tb => (
+          <button key={tb.k} onClick={() => setTab(tb.k)} style={{
             padding: "9px 16px", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-            color: tab === t.k ? "#0ea5e9" : "#64748b", borderBottom: tab === t.k ? "2px solid #0ea5e9" : "2px solid transparent", marginBottom: -1,
-          }}>{t.l}</button>
+            color: tab === tb.k ? "#0ea5e9" : "#64748b", borderBottom: tab === tb.k ? "2px solid #0ea5e9" : "2px solid transparent", marginBottom: -1,
+          }}>{tb.l}</button>
         ))}
       </div>
 
@@ -372,47 +402,47 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
-              <SectionHeader icon="📄" title="Order References" accent="#0ea5e9" />
-              <Field label="PO#" value={order.po} />
-              <Field label="Customer PO#" value={order.customer_po} />
-              <Field label="Supplier Order No#" value={order.supplier_order_no} />
-              <Field label="CRD Date" value={order.crd_date} />
-              <Field label="Incoterms" value={order.incoterms} />
+              <SectionHeader icon="📄" title={t("Order References")} accent="#0ea5e9" />
+              <Field label={t("PO#")} value={order.po} />
+              <Field label={t("Customer PO#")} value={order.customer_po} />
+              <Field label={t("Supplier Order No#")} value={order.supplier_order_no} />
+              <Field label={t("CRD Date")} value={order.crd_date} />
+              <Field label={t("Incoterms")} value={order.incoterms} />
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
-              <SectionHeader icon="🏢" title="Parties" accent="#10b981" />
-              <Field label="Supplier" value={order.supplier} />
-              {!masked.has("customer")     && <Field label="Customer" value={order.customer} />}
-              {!masked.has("end_customer") && <Field label="End Customer" value={order.end_customer} />}
+              <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
+              <Field label={t("Supplier")} value={order.supplier} />
+              {!masked.has("customer")     && <Field label={t("Customer")} value={order.customer} />}
+              {!masked.has("end_customer") && <Field label={t("End Customer")} value={order.end_customer} />}
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
-              <SectionHeader icon="📦" title="Cargo Details" accent="#f59e0b" />
-              <Field label="TUC / Description" value={order.tuc} />
-              <Field label="SKU" value={order.sku} />
-              <Field label="QTY (Packages)" value={order.qty_packages} />
-              <Field label="Weight" value={order.weight ? `${order.weight} kg` : null} />
-              <Field label="Volume" value={order.volume ? `${order.volume} m³` : null} />
+              <SectionHeader icon="📦" title={t("Cargo Details")} accent="#f59e0b" />
+              <Field label={t("Description (TUC)")} value={order.tuc} />
+              <Field label={t("SKU")} value={order.sku} />
+              <Field label={t("QTY (Packages)")} value={order.qty_packages} />
+              <Field label={t("Weight (kg)")} value={order.weight ? `${order.weight} kg` : null} />
+              <Field label={t("Volume (m³)")} value={order.volume ? `${order.volume} m³` : null} />
             </div>
           </div>
           <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-            <SectionHeader icon="🚢" title="Shipping Details" accent="#6366f1" />
+            <SectionHeader icon="🚢" title={t("Shipping Details")} accent="#6366f1" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0 24px" }}>
-              <Field label="E-Booking No" value={order.e_booking_no} />
-              <Field label="Booking No" value={order.booking_no} />
-              <Field label="POL → POD" value={order.pol && order.pod ? `${order.pol} → ${order.pod}` : null} />
-              <Field label="Carrier" value={order.carrier} />
-              <Field label="Agent" value={order.carrier_agent} />
-              <Field label="Container No" value={order.container_no} />
-              <Field label="QTY (Container)" value={order.qty_container} />
-              <Field label="Vessel" value={order.vessel} />
+              <Field label={t("E-Booking No")} value={order.e_booking_no} />
+              <Field label={t("Booking No")} value={order.booking_no} />
+              <Field label={`${t("POL")} → ${t("POD")}`} value={order.pol && order.pod ? `${order.pol} → ${order.pod}` : null} />
+              <Field label={t("Carrier")} value={order.carrier} />
+              <Field label={t("Agent")} value={order.carrier_agent} />
+              <Field label={t("Container No")} value={order.container_no} />
+              <Field label={t("QTY (Container)")} value={order.qty_container} />
+              <Field label={t("Vessel")} value={order.vessel} />
               <Field label="ETD → ETA" value={(order.etd || order.eta) ? `${order.etd || "—"} → ${order.eta || "—"}` : null} />
             </div>
           </div>
           {(role === "admin" || role === "operator") &&
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #f59e0b" }}>
-              <SectionHeader icon="📋" title="Loading Details" accent="#f59e0b"
-                right={<Button small variant="accent" onClick={onOpenLoading}>+ Manage Loading</Button>} />
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Click "Manage Loading" to add or view loading records.</p>
+              <SectionHeader icon="📋" title={t("Loading Details")} accent="#f59e0b"
+                right={<Button small variant="accent" onClick={onOpenLoading}>+ {t("Manage Loading")}</Button>} />
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>{t("Click to manage loading records.")}</p>
             </div>}
         </>
       )}
@@ -679,7 +709,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
 function exportToCSV(rows, role, columns) {
   const masked = maskedFields(role);
   const cols = columns.filter(c => !masked.has(c.key));
-  const headers = cols.map(c => c.label);
+  const headers = cols.map(c => t(c.label));
   const data = rows.map(o => cols.map(c => {
     const v = c.render ? null : o[c.key];  // skip rendered React nodes; export raw
     return v == null ? (c.render ? extractTextFromCell(c, o) : "") : v;

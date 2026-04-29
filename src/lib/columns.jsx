@@ -1,4 +1,5 @@
 import { Badge } from "../components/ui.jsx";
+import { t } from "./i18n.js";
 
 // All columns available in the shipments list view.
 // `render(o)` receives the shipment row and returns a React node.
@@ -38,6 +39,10 @@ export const SHIPMENT_COLUMNS = [
     render: (o) => o.telex_release ? <Badge value={o.telex_release} small/> : "—" },
   { key: "bl_status",      label: "B/L",              defaultVisible: true,  width: 95,
     render: (o) => o.bl_status ? <Badge value={o.bl_status} small/> : "—" },
+  { key: "entry_done",     label: "Entry",            defaultVisible: true,  width: 110, maskable: true,
+    render: (o) => o.entry_done
+      ? <span style={{ color: "#16a34a", fontWeight: 600, fontSize: 12 }}>✓ {o.entry_number || ""}</span>
+      : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span> },
 ];
 
 export const COLUMN_MAP = Object.fromEntries(SHIPMENT_COLUMNS.map(c => [c.key, c]));

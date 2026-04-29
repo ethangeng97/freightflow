@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Modal, Button } from "./ui.jsx";
 import { COLUMN_MAP, defaultColumnConfig } from "../lib/columns.jsx";
+import { t } from "../lib/i18n.js";
 
 // Pure presentational drag-reorder list. Works for any list of {key,visible}.
 export function ColumnManager({ config, onChange, onClose, onReset, hiddenKeys = [] }) {
@@ -79,7 +80,7 @@ export function ColumnManager({ config, onChange, onClose, onReset, hiddenKeys =
               <input type="checkbox" checked={it.visible} onChange={() => toggle(it.key)}
                 onClick={(e) => e.stopPropagation()} style={{ cursor: "pointer", width: 14, height: 14 }} />
               <span style={{ flex: 1, fontSize: 12.5, fontWeight: 500, color: it.visible ? "#0f172a" : "#94a3b8" }}>
-                {meta.label}
+                {t(meta.label)}
               </span>
             </div>
           );

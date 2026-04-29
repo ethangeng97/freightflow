@@ -13,12 +13,13 @@ export const isCustomer = (u) => u?.profile?.role === "customer";
 export function maskedFields(role) {
   if (role === "operator") return new Set(["customer", "end_customer"]);
   if (role === "sales")    return new Set(["end_customer"]);
-  if (role === "customer") return new Set(); // customer sees their own shipments including end_customer
+  if (role === "customer") return new Set(["entry_done", "entry_number"]); // customer cannot see entry status
   return new Set();
 }
 
 // Editable fields per role in shipment detail page.
 export function canEditField(role, field) {
+  if (field === "entry_done" || field === "entry_number") return role === "operator" || role === "admin";
   if (role === "admin")    return true;
   if (role === "customer") return field === "qc_status";
   if (role === "operator" || role === "sales") return field !== "qc_status";

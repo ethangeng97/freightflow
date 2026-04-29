@@ -5,6 +5,7 @@ import { CustomersPage } from "./pages/Customers.jsx";
 import { KnowledgePage } from "./pages/Knowledge.jsx";
 import { ManagePage } from "./pages/Manage.jsx";
 import { canAccessPage } from "./lib/permissions.js";
+import { t, setI18nRole } from "./lib/i18n.js";
 
 const FobcargoLogo = ({ size = 30 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
@@ -30,6 +31,7 @@ function LoginPage({ onLogin }) {
       const data = await supabase.auth.signIn(email, password);
       const { data: profile } = await supabase.from("user_profiles").select("*").eq("id", data.user.id).single();
       onLogin({ ...data.user, profile });
+      setI18nRole(profile?.role || "operator");
     } catch (err) { setError(err.message || "Login failed"); }
     finally { setLoading(false); }
   };
@@ -78,6 +80,7 @@ export default function App() {
           try {
             const { data: profile } = await supabase.from("user_profiles").select("*").eq("id", u.id).single();
             setUser({ ...u, profile });
+            setI18nRole(profile?.role || "operator");
           } catch { supabase.auth.signOut(); }
         }
       }
@@ -105,11 +108,11 @@ export default function App() {
 
   const role = user.profile?.role || "operator";
   const navItems = [
-    { key: "shipments", icon: "📦", label: "Shipments" },
-    { key: "logs",      icon: "📋", label: "Audit Log" },
-    { key: "customers", icon: "🤝", label: "Customers" },
-    { key: "knowledge", icon: "📚", label: "Knowledge" },
-    { key: "manage",    icon: "⚙️", label: "Manage" },
+    { key: "shipments", icon: "📦", label: t("Shipments") },
+    { key: "logs",      icon: "📋", label: t("Audit Log") },
+    { key: "customers", icon: "🤝", label: t("Customers") },
+    { key: "knowledge", icon: "📚", label: t("Knowledge") },
+    { key: "manage",    icon: "⚙️", label: t("Manage") },
   ].filter(item => canAccessPage(role, item.key));
 
   return (
@@ -140,12 +143,12 @@ export default function App() {
 
           {(view === "shipments" || view === "logs") && (
             <>
-              <div style={{ margin: "14px 4px 6px", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Overview</div>
+              <div style={{ margin: "14px 4px 6px", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{t("Overview")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "0 4px" }}>
                 {[
-                  { l: "Total",         v: stats.total,        c: "#0ea5e9" },
-                  { l: "QC Pending",    v: stats.qcPending,    c: "#f59e0b" },
-                  { l: "Payment Due",   v: stats.paymentDue,   c: "#ef4444" },
+                  { l: t("Total"),         v: stats.total,        c: "#0ea5e9" },
+                  { l: t("QC Pending"),    v: stats.qcPending,    c: "#f59e0b" },
+                  { l: t("Payment Due"),   v: stats.paymentDue,   c: "#ef4444" },
                   { l: "Telex Pending", v: stats.telexPending, c: "#8b5cf6" },
                   { l: "B/L Pending",   v: stats.blPending,    c: "#0891b2" },
                 ].map(s => (
