@@ -168,7 +168,7 @@ export default function App() {
 
         {/* Main */}
         <div style={{ flex: 1, padding: 20, overflowX: "auto" }}>
-          {(view === "shipments" || view === "logs") && <ShipmentsPage user={user} view={view} setView={setView} statFilter={statFilter} clearStatFilter={() => setStatFilter(null)} />}
+          {(view === "shipments" || view === "logs") && <ShipmentsPage user={user} view={view} setView={setView} statFilter={statFilter} />}
           {view === "customers" && <CustomersPage user={user} />}
           {view === "suppliers" && <KnowledgePage user={user} defaultTab="supplier" supplierOnly />}
           {view === "knowledge" && <KnowledgePage user={user} />}

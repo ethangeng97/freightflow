@@ -11,7 +11,7 @@ import { t, tSupplier, setSupplierCnMap } from "../lib/i18n.js";
 // =========================================================================
 // Shipments Page (entry)
 // =========================================================================
-export function ShipmentsPage({ user, view, setView, statFilter, clearStatFilter }) {
+export function ShipmentsPage({ user, view, setView, statFilter }) {
   const role = user.profile?.role;
   const [shipments, setShipments] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -31,19 +31,24 @@ export function ShipmentsPage({ user, view, setView, statFilter, clearStatFilter
   const [textFilters, setTextFilters] = useState({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
   const [checkedIds, setCheckedIds] = useState(new Set());
 
-  // Handle stat clicks from sidebar — apply once then clear
-  const statFilterRef = useRef(null);
-  if (statFilter && statFilter !== statFilterRef.current) {
-    statFilterRef.current = statFilter;
-    const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" };
-    if (statFilter.entry_done) {
-      base.entry_done = statFilter.entry_done;
-    } else if (statFilter.qc_status !== "pending") {
-      const key = Object.keys(statFilter)[0];
-      if (key) base[key] = statFilter[key];
+  // Handle stat clicks from sidebar
+  const statFilterApplied = useRef(null);
+  useEffect(() => {
+    if (statFilter && statFilter !== statFilterApplied.current) {
+      statFilterApplied.current = statFilter;
+      const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" };
+      if (statFilter.entry_done) {
+        base.entry_done = statFilter.entry_done;
+      } else {
+        const key = Object.keys(statFilter)[0];
+        if (key && statFilter[key] !== "pending") base[key] = statFilter[key];
+      }
+      setFilters(base);
+      setSelectedId(null);
+      setSearch("");
+      setTextFilters({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
     }
-    setTimeout(() => { setFilters(base); setSelectedId(null); setSearch(""); setTextFilters({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" }); clearStatFilter?.(); }, 0);
-  }
+  }, [statFilter]);
 
   // Load
   const loadShipments = useCallback(async () => {
