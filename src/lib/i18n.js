@@ -14,7 +14,7 @@ const zh = {
   "Cust PO#": "客户PO#",
   "TUC / Description": "品名",
   "SKU": "SKU",
-  "Supplier": "供应商",
+  "Supplier": "委托方",
   "Customer": "客户",
   "End Customer": "终端客户",
   "Route": "航线",
@@ -43,12 +43,8 @@ const zh = {
   "Telex Release": "电放",
   "Incoterms": "贸易条款",
   "CRD Date": "CRD日期",
-  "Supplier": "供应商",
-  "Customer": "客户",
-  "End Customer": "终端客户",
-  "PO#": "PO#",
   "Customer PO#": "客户PO#",
-  "Supplier Order No#": "供应商订单号",
+  "Supplier Order No#": "委托方订单号",
   "Description (TUC)": "品名",
   "SKU": "SKU",
   "QTY (Packages)": "件数",
@@ -118,9 +114,14 @@ const zh = {
 };
 
 let _role = "admin"; // default English
+let _supplierCnMap = {}; // english name → chinese name
 
 export function setI18nRole(role) {
   _role = role;
+}
+
+export function setSupplierCnMap(map) {
+  _supplierCnMap = map || {};
 }
 
 export function t(key) {
@@ -128,6 +129,15 @@ export function t(key) {
     return zh[key] || key;
   }
   return key;
+}
+
+// Translate supplier name: show chinese if available for operator/sales
+export function tSupplier(name) {
+  if (!name) return null;
+  if (_role === "operator" || _role === "sales") {
+    return _supplierCnMap[name] || name;
+  }
+  return name;
 }
 
 // For use in non-reactive contexts (e.g. column definitions)

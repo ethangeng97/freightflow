@@ -6,7 +6,7 @@ import { NotesPanel } from "../components/NotesPanel.jsx";
 import { STATUS_CONFIGS, FIELD_LABELS } from "../lib/constants.js";
 import { SHIPMENT_COLUMNS, COLUMN_MAP, defaultColumnConfig, reconcileColumnConfig, applyRoleMask } from "../lib/columns.jsx";
 import { isAdmin, canEditField, maskedFields } from "../lib/permissions.js";
-import { t } from "../lib/i18n.js";
+import { t, tSupplier, setSupplierCnMap } from "../lib/i18n.js";
 
 // =========================================================================
 // Shipments Page (entry)
@@ -51,12 +51,14 @@ export function ShipmentsPage({ user, view, setView }) {
     ]);
     setRefData({
       suppliers:    (s.data || []).map(x => x.name),
+      supplierCnMap: Object.fromEntries((s.data || []).filter(x => x.name_cn).map(x => [x.name, x.name_cn])),
       customers:    (cu.data || []).map(x => x.name),
       carriers:     (ca.data || []).map(x => x.name),
       carriersWithAgents: ca.data || [],
       ports:        (p.data || []).map(x => `${x.name} (${x.code})`),
       endCustomers: (ec.data || []).map(x => x.name),
     });
+    setSupplierCnMap(Object.fromEntries((s.data || []).filter(x => x.name_cn).map(x => [x.name, x.name_cn])));
   }, []);
   const loadColConfig = useCallback(async () => {
     const { data } = await supabase.from("column_preferences")
@@ -411,7 +413,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
               <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
-              <Field label={t("Supplier")} value={order.supplier} />
+              <Field label={t("Supplier")} value={tSupplier(order.supplier)} />
               {!masked.has("customer")     && <Field label={t("Customer")} value={order.customer} />}
               {!masked.has("end_customer") && <Field label={t("End Customer")} value={order.end_customer} />}
             </div>
@@ -730,6 +732,7 @@ function exportToCSV(rows, role, columns) {
 
 // Best-effort: when render returns React, fall back to a text representation.
 function extractTextFromCell(col, o) {
+  if (col.key === "supplier") return tSupplier(o.supplier) || "";
   if (col.key === "route")   return o.pol && o.pod ? `${(o.pol || "").split("(")[0].trim()} -> ${(o.pod || "").split("(")[0].trim()}` : "";
   if (col.key === "carrier") return o.carrier ? (o.carrier_agent ? `${o.carrier} (${o.carrier_agent})` : o.carrier) : "";
   // For Badge-rendered status fields, the underlying value is the field key itself

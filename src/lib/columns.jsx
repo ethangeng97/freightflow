@@ -1,5 +1,5 @@
 import { Badge } from "../components/ui.jsx";
-import { t } from "./i18n.js";
+import { t, tSupplier } from "./i18n.js";
 
 // All columns available in the shipments list view.
 // `render(o)` receives the shipment row and returns a React node.
@@ -9,7 +9,8 @@ export const SHIPMENT_COLUMNS = [
   { key: "customer_po",    label: "Cust PO#",         defaultVisible: true,  mono: true,  width: 110 },
   { key: "tuc",            label: "TUC / Description", defaultVisible: true, width: 180 },
   { key: "sku",            label: "SKU",              defaultVisible: false, mono: true,  width: 110 },
-  { key: "supplier",       label: "Supplier",         defaultVisible: true,  width: 130, maskable: false },
+  { key: "supplier",       label: "Supplier",         defaultVisible: true,  width: 130, maskable: false,
+    render: (o) => tSupplier(o.supplier) || "—" },
   { key: "customer",       label: "Customer",         defaultVisible: true,  width: 140, maskable: true },
   { key: "end_customer",   label: "End Customer",     defaultVisible: false, width: 140, maskable: true },
   { key: "route",          label: "Route",            defaultVisible: true,  width: 150,
