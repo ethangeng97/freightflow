@@ -970,7 +970,7 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
       }
       vals.push(cur.trim());
       const row = {};
-      headers.forEach((h, idx) => { if (h && vals[idx]) row[h] = vals[idx]; });
+      headers.forEach((h, idx) => { if (h) row[h] = vals[idx] || null; });
       if (Object.keys(row).length > 0) data.push(row);
     }
     return data;
