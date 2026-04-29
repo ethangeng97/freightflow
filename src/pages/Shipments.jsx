@@ -212,7 +212,8 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
         <ShipmentDetail order={selectedOrder} logs={orderLogs} role={role} user={user}
           onBack={() => setSelectedId(null)}
           onUpdateField={handleUpdateField}
-          onOpenLoading={() => setLoadingDetailShipment(selectedOrder)} />
+          onOpenLoading={() => setLoadingDetailShipment(selectedOrder)}
+          refData={refData} />
       ) : (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 14 }}>
@@ -362,9 +363,51 @@ function ShipmentTable({ rows, columns, role, checkedIds, onToggleCheck, onToggl
 // =========================================================================
 // Shipment Detail
 // =========================================================================
-function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpenLoading }) {
+function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpenLoading, refData }) {
   const [tab, setTab] = useState("overview");
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({});
   const masked = maskedFields(role);
+  const canEdit = role === "admin" || role === "operator" || role === "sales";
+
+  const startEdit = () => { setEditData({ ...order }); setEditing(true); };
+  const cancelEdit = () => { setEditing(false); setEditData({}); };
+  const saveEdit = async () => {
+    const changes = {};
+    for (const k of Object.keys(editData)) {
+      if (editData[k] !== order[k] && k !== "id" && k !== "created_at" && k !== "updated_at") {
+        changes[k] = editData[k];
+      }
+    }
+    if (Object.keys(changes).length === 0) { setEditing(false); return; }
+    for (const [field, newV] of Object.entries(changes)) {
+      await onUpdateField(order.id, field, order[field], newV);
+    }
+    setEditing(false);
+  };
+  const ed = (field) => editing ? editData[field] || "" : null;
+  const setEd = (field, val) => setEditData(p => ({ ...p, [field]: val }));
+
+  const EditableField = ({ label, field, type, options }) => {
+    if (!editing) return <Field label={label} value={order[field]} />;
+    if (options) {
+      return (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
+          <select value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box" }}>
+            <option value="">—</option>{options.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
+        <input type={type || "text"} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
+      </div>
+    );
+  };
+
   return (
     <div>
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 0", border: "none", background: "none", color: "#0ea5e9", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>← Back</button>
@@ -373,8 +416,10 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, fontFamily: "'DM Mono',monospace" }}>{order.po || "No PO#"}</h1>
           <p style={{ fontSize: 13, color: "#64748b", margin: "3px 0 0" }}>{order.tuc || ""}</p>
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {Object.keys(STATUS_CONFIGS).map(k => order[k] ? <Badge key={k} value={order[k]} /> : null)}
+          {canEdit && !editing && <Button small onClick={startEdit}>✎ {t("Edit")}</Button>}
+          {editing && <><Button small onClick={saveEdit}>✓ {t("Save")}</Button><Button small variant="secondary" onClick={cancelEdit}>✕ {t("Cancel")}</Button></>}
         </div>
       </div>
 
@@ -438,41 +483,43 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, onOpen
       {tab === "overview" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
+            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #0ea5e9" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="📄" title={t("Order References")} accent="#0ea5e9" />
-              <Field label={t("PO#")} value={order.po} />
-              <Field label={t("Customer PO#")} value={order.customer_po} />
-              <Field label={t("Supplier Order No#")} value={order.supplier_order_no} />
-              <Field label={t("CRD Date")} value={order.crd_date} />
-              <Field label={t("Incoterms")} value={order.incoterms} />
+              <EditableField label={t("PO#")} field="po" />
+              <EditableField label={t("Customer PO#")} field="customer_po" />
+              <EditableField label={t("Supplier Order No#")} field="supplier_order_no" />
+              <EditableField label={t("CRD Date")} field="crd_date" type="date" />
+              <EditableField label={t("Incoterms")} field="incoterms" options={["FOB","CIF","EXW","CFR","DDP","DAP","FCA","CPT","CIP","DAT"]} />
             </div>
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
+            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
-              <Field label={t("Supplier")} value={tSupplier(order.supplier)} />
-              {!masked.has("customer")     && <Field label={t("Customer")} value={order.customer} />}
-              {!masked.has("end_customer") && <Field label={t("End Customer")} value={order.end_customer} />}
+              <EditableField label={t("Supplier")} field="supplier" options={refData?.suppliers} />
+              {!masked.has("customer")     && <EditableField label={t("Customer")} field="customer" options={refData?.customers} />}
+              {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} />}
             </div>
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
+            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #f59e0b" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="📦" title={t("Cargo Details")} accent="#f59e0b" />
-              <Field label={t("Description (TUC)")} value={order.tuc} />
-              <Field label={t("SKU")} value={order.sku} />
-              <Field label={t("QTY (Packages)")} value={order.qty_packages} />
-              <Field label={t("Weight (kg)")} value={order.weight ? `${order.weight} kg` : null} />
-              <Field label={t("Volume (m³)")} value={order.volume ? `${order.volume} m³` : null} />
+              <EditableField label={t("Description (TUC)")} field="tuc" />
+              <EditableField label={t("SKU")} field="sku" />
+              <EditableField label={t("QTY (Packages)")} field="qty_packages" />
+              <EditableField label={t("Weight (kg)")} field="weight" />
+              <EditableField label={t("Volume (m³)")} field="volume" />
             </div>
           </div>
-          <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0", marginBottom: 14 }}>
+          <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #6366f1" : "1px solid #e2e8f0", marginBottom: 14 }}>
             <SectionHeader icon="🚢" title={t("Shipping Details")} accent="#6366f1" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0 24px" }}>
-              <Field label={t("E-Booking No")} value={order.e_booking_no} />
-              <Field label={t("Booking No")} value={order.booking_no} />
-              <Field label={`${t("POL")} → ${t("POD")}`} value={order.pol && order.pod ? `${order.pol} → ${order.pod}` : null} />
-              <Field label={t("Carrier")} value={order.carrier} />
-              <Field label={t("Agent")} value={order.carrier_agent} />
-              <Field label={t("Container No")} value={order.container_no} />
-              <Field label={t("QTY (Container)")} value={order.qty_container} />
-              <Field label={t("Vessel")} value={order.vessel} />
-              <Field label="ETD → ETA" value={(order.etd || order.eta) ? `${order.etd || "—"} → ${order.eta || "—"}` : null} />
+              <EditableField label={t("E-Booking No")} field="e_booking_no" />
+              <EditableField label={t("Booking No")} field="booking_no" />
+              <EditableField label={t("POL")} field="pol" options={refData?.ports} />
+              <EditableField label={t("POD")} field="pod" options={refData?.ports} />
+              <EditableField label={t("Carrier")} field="carrier" options={refData?.carriers} />
+              <EditableField label={t("Agent")} field="carrier_agent" />
+              <EditableField label={t("Container No")} field="container_no" />
+              <EditableField label={t("QTY (Container)")} field="qty_container" />
+              <EditableField label={t("Vessel")} field="vessel" />
+              <EditableField label="ETD" field="etd" type="date" />
+              <EditableField label="ETA" field="eta" type="date" />
             </div>
           </div>
           {(role === "admin" || role === "operator") &&
