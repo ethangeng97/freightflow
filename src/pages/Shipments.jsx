@@ -150,11 +150,11 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
         if (val === null || val === undefined || val === "") return "—";
         return String(val);
       };
-      await supabase.from("audit_logs").insert({
+      try { await supabase.from("audit_logs").insert({
         shipment_id: sid, user_id: user.id, user_email: user.email,
         field_name: FIELD_LABELS[field] || field,
         old_value: humanize(field, oldV), new_value: humanize(field, newV),
-      }).catch(() => {});
+      }); } catch(_) {}
       loadShipments(); loadLogs();
     } catch (e) {
       alert("Update error: " + (e.message || e));
