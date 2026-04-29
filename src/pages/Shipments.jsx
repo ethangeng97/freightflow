@@ -732,7 +732,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
   const emptyRow = { po: shipment.po || "", customer_po: shipment.customer_po || "", sku: "", tuc: "", hs_code: "", booked_packages: null, packing_unit: "CTNS", booked_weight: null, booked_volume: null, marks: "", booking_no: shipment.booking_no || "", container_no: shipment.container_no || "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("sort_order").order("created_at");
+    const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("created_at");
     setItems(data || []); setLoading(false);
   }, [shipment.id]);
   useEffect(() => { load(); }, [load]);
@@ -745,7 +745,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     setItems(prev => [...prev, { ...row, id: tempId }]);
     // Save in background
     const { data, error } = await supabase.from("loading_details").insert(row).select("id").single();
-    if (error) { alert(error.message); load(); return; }
+    if (error || !data) { if (error) alert(error.message); load(); return; }
     // Replace temp id with real id
     setItems(prev => prev.map(it => it.id === tempId ? { ...it, id: data.id } : it));
   };
@@ -755,6 +755,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
   };
 
   const saveCell = async (id, field, value) => {
+    if (String(id).startsWith("temp_")) return; // not yet saved to DB
     const numFields = ["booked_packages", "actual_packages", "booked_weight", "actual_weight", "booked_volume", "actual_volume"];
     const v = numFields.includes(field) ? (value === "" || value == null ? null : Number(value)) : (value === "" ? null : value);
     const { error } = await supabase.from("loading_details").update({ [field]: v }).eq("id", id);
