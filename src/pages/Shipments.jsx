@@ -997,6 +997,21 @@ function ShipmentLoadingFromContainers({ order, role }) {
       if (cIds.length > 0) {
         const { data } = await supabase.from("containers").select("*").in("id", cIds);
         setContainers(data || []);
+        // Auto-sync: update shipment's container_no/booking_no from linked containers
+        if (data && data.length > 0) {
+          const ctrNos = [...new Set(data.map(c => c.container_no).filter(Boolean))].join(", ");
+          const bkgNos = [...new Set(data.map(c => c.booking_no).filter(Boolean))].join(", ");
+          const vessels = [...new Set(data.map(c => c.vessel).filter(Boolean))];
+          const carriers = [...new Set(data.map(c => c.carrier).filter(Boolean))];
+          const updates = {};
+          if (ctrNos && ctrNos !== order.container_no) updates.container_no = ctrNos;
+          if (bkgNos && bkgNos !== order.booking_no) updates.booking_no = bkgNos;
+          if (vessels.length === 1 && !order.vessel) updates.vessel = vessels[0];
+          if (carriers.length === 1 && !order.carrier) updates.carrier = carriers[0];
+          if (Object.keys(updates).length > 0) {
+            supabase.from("shipments").update(updates).eq("id", order.id);
+          }
+        }
       }
       setLoading(false);
     })();

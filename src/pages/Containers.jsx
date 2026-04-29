@@ -280,7 +280,7 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
             <div style={{ overflowX: "auto", marginTop: 8 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                 <thead><tr style={{ background: "#fffbeb" }}>
-                  {[t("Supplier"), "PO", "Customer PO", t("TUC"), "SKU", "QTY", t("Weight"), "CBM", "HBL", ""].map(h =>
+                  {[t("Supplier"), "PO", "Customer PO", t("TUC"), "SKU", "QTY (CTNS)", t("Weight"), "CBM", "HBL", ""].map(h =>
                     <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#92400e", fontSize: 10, borderBottom: "2px solid #fde68a", whiteSpace: "nowrap" }}>{h}</th>
                   )}
                 </tr></thead>
@@ -490,7 +490,7 @@ function NewContainerModal({ types, onClose, onSave }) {
         <div style={{ overflowX: "auto", marginBottom: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead><tr style={{ background: "#f0f9ff" }}>
-              {[t("Supplier"), "PO", "Cust PO", t("TUC"), "HS Code", "QTY", t("包装"), t("Weight"), "CBM", "HBL", ""].map(h =>
+              {[t("Supplier"), "PO", "Cust PO", t("TUC"), "HS Code", "QTY (CTNS)", t("包装"), t("Weight"), "CBM", "HBL", ""].map(h =>
                 <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#0369a1", fontSize: 10, borderBottom: "2px solid #bae6fd", whiteSpace: "nowrap" }}>{h}</th>
               )}
             </tr></thead>
