@@ -250,10 +250,20 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
             <BatchUpdateBar checkedIds={checkedIds} role={role} user={user}
               onClear={() => setCheckedIds(new Set())}
               onUpdate={async (field, value) => {
-                for (const id of checkedIds) {
-                  const old = shipments.find(s => s.id === id)?.[field];
-                  await handleUpdateField(id, field, old, value);
-                }
+                const ids = [...checkedIds];
+                // Single bulk update
+                const { error } = await supabase.from("shipments").update({ [field]: value }).in("id", ids);
+                if (error) { alert("Batch update error: " + error.message); return; }
+                // Bulk audit log
+                const humanize = (val) => { if (val === true) return "✓ 是"; if (val === false) return "✗ 否"; if (val == null || val === "") return "—"; return String(val); };
+                const logRows = ids.map(id => ({
+                  shipment_id: id, user_id: user.id, user_email: user.email,
+                  field_name: FIELD_LABELS[field] || field,
+                  old_value: humanize(shipments.find(s => s.id === id)?.[field]),
+                  new_value: humanize(value),
+                }));
+                try { await supabase.from("audit_logs").insert(logRows); } catch(_) {}
+                loadShipments(); loadLogs();
                 setCheckedIds(new Set());
               }}
               onDelete={handleBatchDelete}
