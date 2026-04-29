@@ -106,7 +106,6 @@ const zh = {
   "Users & Roles": "用户与角色",
   "Sales Assignments": "销售分配",
   "Pipeline Stages": "管道阶段",
-  "Suppliers": "供应商",
   "End Customers": "终端客户",
   "Ports": "港口",
   "Carriers & Agents": "船司与代理",
