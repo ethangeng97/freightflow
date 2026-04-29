@@ -95,7 +95,7 @@ export default function App() {
     const arr = data || [];
     setStats({
       total: arr.length,
-      qcPending: arr.filter(o => o.qc_status !== "QC Approved").length,
+      qcPending: arr.filter(o => o.qc_status !== "QC Approved" && o.qc_status !== "Supplier QC Self").length,
       paymentDue: arr.filter(o => o.local_payment === "Waiting").length,
       telexPending: arr.filter(o => o.telex_release === "Pending").length,
       blPending: arr.filter(o => o.bl_status !== "Done").length,
