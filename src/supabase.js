@@ -126,7 +126,7 @@ function createClient() {
           const result = text ? JSON.parse(text) : [];
           resolve({ data: isSingle ? result[0] || null : result, error: null });
         } catch (err) {
-          if (reject) reject(err); else resolve({ data: null, error: err });
+          resolve({ data: null, error: err });
         }
       },
     };

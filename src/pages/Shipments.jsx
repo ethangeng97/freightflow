@@ -140,21 +140,25 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   };
   const handleUpdateField = async (sid, field, oldV, newV) => {
     if (oldV === newV) return;
-    const { error } = await supabase.from("shipments").update({ [field]: newV }).eq("id", sid);
-    if (error) { alert(error.message); return; }
-    // Humanize values for audit log
-    const humanize = (field, val) => {
-      if (val === true) return "✓ 是";
-      if (val === false) return "✗ 否";
-      if (val === null || val === undefined || val === "") return "—";
-      return String(val);
-    };
-    await supabase.from("audit_logs").insert({
-      shipment_id: sid, user_id: user.id, user_email: user.email,
-      field_name: FIELD_LABELS[field] || field,
-      old_value: humanize(field, oldV), new_value: humanize(field, newV),
-    });
-    loadShipments(); loadLogs();
+    try {
+      const res = await supabase.from("shipments").update({ [field]: newV }).eq("id", sid);
+      if (res.error) { alert("Update failed: " + res.error.message); return; }
+      // Humanize values for audit log
+      const humanize = (f, val) => {
+        if (val === true) return "✓ 是";
+        if (val === false) return "✗ 否";
+        if (val === null || val === undefined || val === "") return "—";
+        return String(val);
+      };
+      await supabase.from("audit_logs").insert({
+        shipment_id: sid, user_id: user.id, user_email: user.email,
+        field_name: FIELD_LABELS[field] || field,
+        old_value: humanize(field, oldV), new_value: humanize(field, newV),
+      }).catch(() => {});
+      loadShipments(); loadLogs();
+    } catch (e) {
+      alert("Update error: " + (e.message || e));
+    }
   };
 
   // Batch
