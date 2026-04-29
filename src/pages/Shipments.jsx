@@ -416,7 +416,10 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
   const [tab, setTab] = useState("overview");
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({});
+  const [containerInfo, setContainerInfo] = useState({});
   const masked = maskedFields(role);
+  // Merge container-derived info for display
+  const displayOrder = { ...order, ...containerInfo };
   const canEdit = role === "admin" || role === "operator" || role === "sales";
 
   const startEdit = () => { setEditData({ ...order }); setEditing(true); };
@@ -438,7 +441,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
   const setEd = (field, val) => setEditData(p => ({ ...p, [field]: val }));
 
   const EditableField = ({ label, field, type, options }) => {
-    if (!editing) return <Field label={label} value={order[field]} />;
+    if (!editing) return <Field label={label} value={displayOrder[field]} />;
     if (options) {
       return (
         <div style={{ marginBottom: 8 }}>
@@ -572,7 +575,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
             </div>
           </div>
           {/* Loading Data — from container_items, matched by PO */}
-          <ShipmentLoadingFromContainers order={order} role={role} />
+          <ShipmentLoadingFromContainers order={order} role={role} onContainerInfo={setContainerInfo} />
         </>
       )}
       {tab === "history" && (
@@ -965,7 +968,7 @@ function BatchUpdateBar({ checkedIds, role, user, onClear, onUpdate, onDelete, o
 
 // Show loading data from container_items, matched by PO/customer_po
 // Compares original shipment data vs real loading data
-function ShipmentLoadingFromContainers({ order, role }) {
+function ShipmentLoadingFromContainers({ order, role, onContainerInfo }) {
   const [items, setItems] = useState([]);
   const [containers, setContainers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1016,6 +1019,7 @@ function ShipmentLoadingFromContainers({ order, role }) {
           updates.qty_container = Object.entries(typeCount).map(([t, c]) => `${c}x${t}`).join(", ");
           if (Object.keys(updates).length > 0) {
             await supabase.from("shipments").update(updates).eq("id", order.id);
+            onContainerInfo?.(updates);
           }
         }
       }
