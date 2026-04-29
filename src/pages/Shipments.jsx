@@ -728,7 +728,7 @@ function SelOrInput({ label, field, form, set, options }) {
 function LoadingDetailModal({ shipment, onClose, onSaved }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const saveQueue = useRef({});
   const emptyRow = { po: shipment.po || "", customer_po: shipment.customer_po || "", sku: "", tuc: "", hs_code: "", booked_packages: null, packing_unit: "CTNS", booked_weight: null, booked_volume: null, marks: "", booking_no: shipment.booking_no || "", container_no: shipment.container_no || "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
 
   const load = useCallback(async () => {
@@ -738,15 +738,16 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
   useEffect(() => { load(); }, [load]);
 
   const addRow = async () => {
-    setSaving(true);
+    const tempId = "temp_" + Date.now();
     const row = { ...emptyRow, shipment_id: shipment.id, sort_order: items.length };
-    // Clean empty strings to null for non-text fields
-    for (const k of Object.keys(row)) {
-      if (row[k] === "") row[k] = null;
-    }
-    const { error } = await supabase.from("loading_details").insert(row);
-    if (error) alert(error.message);
-    setSaving(false); load();
+    for (const k of Object.keys(row)) { if (row[k] === "") row[k] = null; }
+    // Optimistic: show immediately
+    setItems(prev => [...prev, { ...row, id: tempId }]);
+    // Save in background
+    const { data, error } = await supabase.from("loading_details").insert(row).select("id").single();
+    if (error) { alert(error.message); load(); return; }
+    // Replace temp id with real id
+    setItems(prev => prev.map(it => it.id === tempId ? { ...it, id: data.id } : it));
   };
 
   const updateLocal = (id, field, value) => {
@@ -762,8 +763,9 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
 
   const deleteRow = async (id) => {
     if (!confirm("Delete this row?")) return;
+    setItems(prev => prev.filter(it => it.id !== id));
     await supabase.from("loading_details").delete().eq("id", id);
-    load(); syncToShipment();
+    syncToShipment();
   };
 
   const syncToShipment = async () => {
