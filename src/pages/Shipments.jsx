@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "../supabase.js";
 import { Badge, Field, SectionHeader, FilterDropdown, Modal, Button, Input, Select, Spinner, EmptyState, Tag } from "../components/ui.jsx";
 import { ColumnManager } from "../components/ColumnManager.jsx";
@@ -32,7 +32,7 @@ export function ShipmentsPage({ user, view, setView, statFilter, clearStatFilter
   const [checkedIds, setCheckedIds] = useState(new Set());
 
   // Handle stat clicks from sidebar — apply once then clear
-  const statFilterRef = React.useRef(null);
+  const statFilterRef = useRef(null);
   if (statFilter && statFilter !== statFilterRef.current) {
     statFilterRef.current = statFilter;
     const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" };
