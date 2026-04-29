@@ -69,6 +69,7 @@ export default function App() {
   const [view, setView] = useState("shipments"); // shipments | logs | customers | knowledge | manage
   const [stats, setStats] = useState({ total: 0, qcPending: 0, paymentDue: 0, telexPending: 0, blPending: 0, entryPending: 0 });
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [statFilter, setStatFilter] = useState(null);
 
   // Restore session on mount (Supabase wrapper persists tokens)
   useEffect(() => {
@@ -106,7 +107,6 @@ export default function App() {
   if (bootstrapping) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0f2f5", color: "#94a3b8" }}>Loading...</div>;
   if (!user) return <LoginPage onLogin={setUser} />;
 
-  const [statFilter, setStatFilter] = useState(null); // passed to ShipmentsPage for stat clicks
   const role = user.profile?.role || "operator";
   const navItems = [
     { key: "shipments", icon: "📦", label: t("Shipments") },
