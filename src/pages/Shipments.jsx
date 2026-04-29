@@ -858,7 +858,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
             </table>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-            <Button variant="secondary" onClick={addRow} disabled={saving}>+ {t("新增行")}</Button>
+            <Button variant="secondary" onClick={addRow}>+ {t("新增行")}</Button>
           </div>
         </>
       )}
