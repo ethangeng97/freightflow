@@ -1,5 +1,5 @@
 export const STATUS_CONFIGS = {
-  qc_status:     { label: "QC Status",     options: ["QC Approved", "QC Reject", "Loading First", "Waiting QC Report", "Under Review"] },
+  qc_status:     { label: "QC Status",     options: ["QC Approved", "QC Reject", "Loading First", "Waiting QC Report", "Under Review", "Supplier QC Self"] },
   space_status:  { label: "Space Status",  options: ["Booked", "Released", "Wait Info"] },
   local_payment: { label: "Payment",       options: ["Reject", "Waiting", "Paid"] },
   telex_release: { label: "Telex Release", options: ["Pending", "Released"] },
@@ -13,6 +13,7 @@ export const STATUS_COLORS = {
   "Loading First": { bg: "#fef9c3", color: "#854d0e", dot: "#eab308" },
   "Waiting QC Report": { bg: "#fff7ed", color: "#9a3412", dot: "#f97316" },
   "Under Review": { bg: "#e0e7ff", color: "#3730a3", dot: "#6366f1" },
+  "Supplier QC Self": { bg: "#fdf2f8", color: "#9d174d", dot: "#ec4899" },
   Booked:    { bg: "#dcfce7", color: "#166534", dot: "#22c55e" },
   Released:  { bg: "#dbeafe", color: "#1e40af", dot: "#3b82f6" },
   "Wait Info": { bg: "#fef9c3", color: "#854d0e", dot: "#eab308" },

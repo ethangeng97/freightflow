@@ -31,6 +31,7 @@ export function canAccessPage(role, page) {
   switch (page) {
     case "shipments":  return true;
     case "logs":       return role === "admin" || role === "operator";
+    case "suppliers":  return role === "admin" || role === "operator" || role === "sales";
     case "customers":  return role === "admin" || role === "sales";
     case "knowledge":  return role !== "customer";
     case "manage":     return role === "admin";

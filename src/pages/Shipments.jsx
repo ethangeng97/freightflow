@@ -11,7 +11,7 @@ import { t, tSupplier, setSupplierCnMap } from "../lib/i18n.js";
 // =========================================================================
 // Shipments Page (entry)
 // =========================================================================
-export function ShipmentsPage({ user, view, setView }) {
+export function ShipmentsPage({ user, view, setView, statFilter, clearStatFilter }) {
   const role = user.profile?.role;
   const [shipments, setShipments] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -27,9 +27,26 @@ export function ShipmentsPage({ user, view, setView }) {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All" });
+  const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" });
   const [textFilters, setTextFilters] = useState({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
   const [checkedIds, setCheckedIds] = useState(new Set());
+
+  // Handle stat clicks from sidebar
+  useEffect(() => {
+    if (statFilter) {
+      clearFilters();
+      setSelectedId(null);
+      if (statFilter.qc_status === "pending") {
+        // QC pending — can't use simple filter, just show all non-approved via search
+      } else if (statFilter.entry_done) {
+        setFilters(p => ({ ...p, entry_done: statFilter.entry_done }));
+      } else {
+        const key = Object.keys(statFilter)[0];
+        if (key) setFilters(p => ({ ...p, [key]: statFilter[key] }));
+      }
+      clearStatFilter?.();
+    }
+  }, [statFilter]);
 
   // Load
   const loadShipments = useCallback(async () => {
@@ -81,6 +98,8 @@ export function ShipmentsPage({ user, view, setView }) {
   const filtered = useMemo(() => shipments.filter((o) => {
     for (const key of Object.keys(STATUS_CONFIGS)) { if (filters[key] !== "All" && o[key] !== filters[key]) return false; }
     if (filters.customer !== "All" && o.customer !== filters.customer) return false;
+    if (filters.entry_done === "已录入" && !o.entry_done) return false;
+    if (filters.entry_done === "未录入" && o.entry_done) return false;
     if (textFilters.booking_no && !(o.booking_no || "").toLowerCase().includes(textFilters.booking_no.toLowerCase())) return false;
     if (textFilters.container_no && !(o.container_no || "").toLowerCase().includes(textFilters.container_no.toLowerCase())) return false;
     if (textFilters.vessel && !(o.vessel || "").toLowerCase().includes(textFilters.vessel.toLowerCase())) return false;
@@ -99,7 +118,7 @@ export function ShipmentsPage({ user, view, setView }) {
     Object.values(textFilters).filter(v => v).length +
     (search ? 1 : 0);
   const clearFilters = () => {
-    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All" });
+    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", entry_done: "All" });
     setTextFilters({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
     setSearch("");
   };
@@ -200,7 +219,8 @@ export function ShipmentsPage({ user, view, setView }) {
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <Button variant="secondary" onClick={() => setShowColMgr(true)}>⚙ {t("Columns")}</Button>
-              <Button variant="secondary" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ {t("Export CSV")}</Button>
+              {(role === "admin" || role === "customer") &&
+                <Button variant="secondary" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ {t("Export CSV")}</Button>}
               {(role === "admin" || role === "operator" || role === "sales") &&
                 <Button onClick={() => setShowNew(true)}>+ {t("New Shipment")}</Button>}
             </div>
@@ -258,8 +278,10 @@ function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, 
         <input placeholder="Search PO#, product, SKU..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ padding: "6px 10px", borderRadius: 6, border: search ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 180, outline: "none", background: search ? "#f0f9ff" : "#fff" }} />
         {Object.entries(STATUS_CONFIGS).map(([key, cfg]) =>
-          <FilterDropdown key={key} label={cfg.label} value={filters[key]} options={cfg.options} onChange={v => setFilters(p => ({ ...p, [key]: v }))} />
+          <FilterDropdown key={key} label={t(cfg.label)} value={filters[key]} options={cfg.options} onChange={v => setFilters(p => ({ ...p, [key]: v }))} />
         )}
+        {!masked.has("entry_done") &&
+          <FilterDropdown label={t("Entry")} value={filters.entry_done} options={["已录入", "未录入"]} onChange={v => setFilters(p => ({ ...p, entry_done: v }))} />}
         {!masked.has("customer") &&
           <FilterDropdown label="Customer" value={filters.customer} options={customerList} onChange={v => setFilters(p => ({ ...p, customer: v }))} />}
       </div>

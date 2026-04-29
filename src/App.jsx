@@ -106,10 +106,12 @@ export default function App() {
   if (bootstrapping) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0f2f5", color: "#94a3b8" }}>Loading...</div>;
   if (!user) return <LoginPage onLogin={setUser} />;
 
+  const [statFilter, setStatFilter] = useState(null); // passed to ShipmentsPage for stat clicks
   const role = user.profile?.role || "operator";
   const navItems = [
     { key: "shipments", icon: "📦", label: t("Shipments") },
     { key: "logs",      icon: "📋", label: t("Audit Log") },
+    { key: "suppliers", icon: "🏭", label: t("Suppliers") },
     { key: "customers", icon: "🤝", label: t("Customers") },
     { key: "knowledge", icon: "📚", label: t("Knowledge") },
     { key: "manage",    icon: "⚙️", label: t("Manage") },
@@ -146,14 +148,15 @@ export default function App() {
               <div style={{ margin: "14px 4px 6px", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{t("Overview")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "0 4px" }}>
                 {[
-                  { l: t("Total"),         v: stats.total,        c: "#0ea5e9" },
-                  { l: t("QC Pending"),    v: stats.qcPending,    c: "#f59e0b" },
-                  { l: t("Payment Due"),   v: stats.paymentDue,   c: "#ef4444" },
-                  { l: t("Telex Pending"), v: stats.telexPending, c: "#8b5cf6" },
-                  { l: t("B/L Pending"),   v: stats.blPending,    c: "#0891b2" },
-                  { l: t("Entry Pending"), v: stats.entryPending, c: "#d946ef" },
+                  { l: t("Total"),         v: stats.total,        c: "#0ea5e9", f: null },
+                  { l: t("QC Pending"),    v: stats.qcPending,    c: "#f59e0b", f: { qc_status: "pending" } },
+                  { l: t("Payment Due"),   v: stats.paymentDue,   c: "#ef4444", f: { local_payment: "Waiting" } },
+                  { l: t("Telex Pending"), v: stats.telexPending, c: "#8b5cf6", f: { telex_release: "Pending" } },
+                  { l: t("B/L Pending"),   v: stats.blPending,    c: "#0891b2", f: { bl_status: "Not Ready" } },
+                  { l: t("Entry Pending"), v: stats.entryPending, c: "#d946ef", f: { entry_done: "未录入" } },
                 ].map(s => (
-                  <div key={s.l} style={{ padding: "8px 10px", borderRadius: 7, background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={s.l} onClick={() => { setView("shipments"); setStatFilter(s.f); }} style={{ padding: "8px 10px", borderRadius: 7, background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#e0f2fe"} onMouseLeave={e => e.currentTarget.style.background = "#f8fafc"}>
                     <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{s.l}</span>
                     <span style={{ fontSize: 18, fontWeight: 700, color: s.c, fontFamily: "'DM Mono',monospace" }}>{s.v}</span>
                   </div>
@@ -165,8 +168,9 @@ export default function App() {
 
         {/* Main */}
         <div style={{ flex: 1, padding: 20, overflowX: "auto" }}>
-          {(view === "shipments" || view === "logs") && <ShipmentsPage user={user} view={view} setView={setView} />}
+          {(view === "shipments" || view === "logs") && <ShipmentsPage user={user} view={view} setView={setView} statFilter={statFilter} clearStatFilter={() => setStatFilter(null)} />}
           {view === "customers" && <CustomersPage user={user} />}
+          {view === "suppliers" && <KnowledgePage user={user} defaultTab="supplier" supplierOnly />}
           {view === "knowledge" && <KnowledgePage user={user} />}
           {view === "manage"    && <ManagePage user={user} />}
         </div>

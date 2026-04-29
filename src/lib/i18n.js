@@ -7,6 +7,7 @@ const zh = {
   "Audit Log": "操作日志",
   "Customers": "客户",
   "Knowledge": "知识库",
+  "Suppliers": "委托方",
   "Manage": "管理",
 
   // Column headers
@@ -92,6 +93,11 @@ const zh = {
   "Loading Details": "装柜详情",
   "Manage Loading": "管理装柜",
   "Click to manage loading records.": "点击管理装柜记录。",
+  "委托方列表": "委托方列表",
+  "选择一个委托方查看详情": "选择一个委托方查看详情",
+  "Notes attached to customers, suppliers, and shipments": "附属于客户、委托方和货件的备注",
+  "Select an item to view notes": "选择一个项目查看备注",
+  "No items found": "暂无数据",
   "已录单": "已录单",
   "未录单": "未录单",
   "系统编号": "系统编号",

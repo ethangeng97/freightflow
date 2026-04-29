@@ -2,9 +2,10 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../supabase.js";
 import { Input, Spinner, EmptyState, Tag, SectionHeader } from "../components/ui.jsx";
 import { NotesPanel } from "../components/NotesPanel.jsx";
+import { t, tSupplier } from "../lib/i18n.js";
 
-export function KnowledgePage({ user }) {
-  const [entityType, setEntityType] = useState("customer");
+export function KnowledgePage({ user, defaultTab, supplierOnly }) {
+  const [entityType, setEntityType] = useState(defaultTab || "customer");
   const [entities, setEntities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -17,11 +18,10 @@ export function KnowledgePage({ user }) {
 
   const loadEntities = useCallback(async () => {
     setLoading(true);
-    const t = tableMap[entityType];
+    const tb = tableMap[entityType];
     const cols = entityType === "shipment" ? "id,po,tuc,customer" : "*";
-    const { data } = await supabase.from(t).select(cols).order(entityType === "shipment" ? "created_at" : "name", { ascending: entityType !== "shipment" });
+    const { data } = await supabase.from(tb).select(cols).order(entityType === "shipment" ? "created_at" : "name", { ascending: entityType !== "shipment" });
     setEntities(data || []); setLoading(false);
-    // Load all notes for the current entity_type so we can show counts
     const { data: notes } = await supabase.from("notes").select("entity_id,id,pinned").eq("entity_type", entityType);
     setAllNotes(notes || []);
   }, [entityType]);
@@ -45,29 +45,32 @@ export function KnowledgePage({ user }) {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>Knowledge Base</h1>
-      <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 16px" }}>Notes attached to customers, suppliers, and shipments</p>
+      <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{supplierOnly ? t("Suppliers") : t("Knowledge")}</h1>
+      <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 16px" }}>{supplierOnly ? t("委托方列表") : t("Notes attached to customers, suppliers, and shipments")}</p>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", border: "1px solid #e2e8f0", borderRadius: 7, overflow: "hidden" }}>
-          {[{ k: "customer", l: "Customers" }, { k: "supplier", l: "Suppliers" }, { k: "shipment", l: "Shipments" }].map((t) => (
-            <button key={t.k} onClick={() => setEntityType(t.k)} style={{
-              padding: "7px 16px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
-              background: entityType === t.k ? "#0ea5e9" : "#fff", color: entityType === t.k ? "#fff" : "#64748b",
-            }}>{t.l}</button>
-          ))}
-        </div>
-        <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
+        {!supplierOnly && (
+          <div style={{ display: "flex", border: "1px solid #e2e8f0", borderRadius: 7, overflow: "hidden" }}>
+            {[{ k: "customer", l: t("Customers") }, { k: "supplier", l: t("Suppliers") }, { k: "shipment", l: t("Shipments") }].map((tb) => (
+              <button key={tb.k} onClick={() => setEntityType(tb.k)} style={{
+                padding: "7px 16px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: entityType === tb.k ? "#0ea5e9" : "#fff", color: entityType === tb.k ? "#fff" : "#64748b",
+              }}>{tb.l}</button>
+            ))}
+          </div>
+        )}
+        <Input placeholder={t("Search...")} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 14 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: 10, maxHeight: "70vh", overflowY: "auto" }}>
-          {loading ? <Spinner /> : filtered.length === 0 ? <EmptyState>No {entityType}s found.</EmptyState> :
+          {loading ? <Spinner /> : filtered.length === 0 ? <EmptyState>{t("No items found")}</EmptyState> :
             filtered.map((e) => {
               const id = e.id;
               const count = noteCounts[id] || 0;
-              const label = e[labelField[entityType]] || "(no name)";
-              const desc = e[descField[entityType]];
+              const rawLabel = e[labelField[entityType]] || "(no name)";
+              const label = entityType === "supplier" ? (tSupplier(rawLabel) || rawLabel) : rawLabel;
+              const desc = entityType === "supplier" ? (e.name_cn ? e.name : null) : e[descField[entityType]];
               const isSel = selected?.id === id;
               return (
                 <button key={id} onClick={() => setSelected({ id, label, desc })} style={{
@@ -84,7 +87,7 @@ export function KnowledgePage({ user }) {
             })}
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: 14 }}>
-          {!selected ? <EmptyState>Select a {entityType} on the left to view & add notes.</EmptyState> : (
+          {!selected ? <EmptyState>{supplierOnly ? t("选择一个委托方查看详情") : t("Select an item to view notes")}</EmptyState> : (
             <>
               <SectionHeader icon="📝" title={selected.label} accent="#0ea5e9" />
               <NotesPanel entityType={entityType} entityId={selected.id} user={user} />
