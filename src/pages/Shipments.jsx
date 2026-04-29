@@ -246,15 +246,20 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
             activeFilterCount={activeFilterCount} clearFilters={clearFilters}
           />
 
-          {checkedIds.size > 0 && isAdmin(user) && (
-            <div style={{ background: "#0f172a", borderRadius: 10, padding: "10px 16px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{checkedIds.size} selected</span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={handleBatchDuplicate} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #334155", background: "none", color: "#94a3b8", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Duplicate</button>
-                <button onClick={handleBatchDelete}    style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #7f1d1d", background: "#450a0a", color: "#fca5a5", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
-                <button onClick={() => setCheckedIds(new Set())} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #334155", background: "none", color: "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              </div>
-            </div>
+          {checkedIds.size > 0 && (role === "admin" || role === "operator" || role === "sales") && (
+            <BatchUpdateBar checkedIds={checkedIds} role={role} user={user}
+              onClear={() => setCheckedIds(new Set())}
+              onUpdate={async (field, value) => {
+                for (const id of checkedIds) {
+                  const old = shipments.find(s => s.id === id)?.[field];
+                  await handleUpdateField(id, field, old, value);
+                }
+                setCheckedIds(new Set());
+              }}
+              onDelete={handleBatchDelete}
+              onDuplicate={handleBatchDuplicate}
+              refData={refData}
+            />
           )}
 
           <ShipmentTable
@@ -816,6 +821,84 @@ function exportToCSV(rows, role, columns) {
   link.href = URL.createObjectURL(blob);
   link.download = `Bansar_Export_${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
+}
+
+// =========================================================================
+// Batch Update Bar — bulk change any field for selected shipments
+// =========================================================================
+function BatchUpdateBar({ checkedIds, role, user, onClear, onUpdate, onDelete, onDuplicate, refData }) {
+  const [field, setField] = useState("");
+  const [value, setValue] = useState("");
+  const [applying, setApplying] = useState(false);
+
+  // All batch-editable fields grouped
+  const statusFields = Object.entries(STATUS_CONFIGS).map(([k, v]) => ({ key: k, label: t(v.label), options: v.options }));
+  const textFields = [
+    { key: "supplier", label: t("Supplier"), options: refData?.suppliers },
+    { key: "customer", label: t("Customer"), options: refData?.customers },
+    { key: "end_customer", label: t("End Customer"), options: refData?.endCustomers },
+    { key: "carrier", label: t("Carrier"), options: refData?.carriers },
+    { key: "carrier_agent", label: t("Agent") },
+    { key: "pol", label: t("POL"), options: refData?.ports },
+    { key: "pod", label: t("POD"), options: refData?.ports },
+    { key: "vessel", label: t("Vessel") },
+    { key: "etd", label: "ETD", type: "date" },
+    { key: "eta", label: "ETA", type: "date" },
+    { key: "booking_no", label: t("Booking No") },
+    { key: "container_no", label: t("Container No") },
+    { key: "qty_container", label: t("QTY (Container)") },
+    { key: "entry_done", label: t("Entry Status"), options: ["true", "false"] },
+  ];
+  const allFields = [...statusFields, ...textFields].filter(f => canEditField(role, f.key));
+
+  const selectedField = allFields.find(f => f.key === field);
+
+  const doApply = async () => {
+    if (!field || !value) return;
+    setApplying(true);
+    const v = field === "entry_done" ? value === "true" : value;
+    await onUpdate(field, v);
+    setApplying(false);
+    setField(""); setValue("");
+  };
+
+  return (
+    <div style={{ background: "#0f172a", borderRadius: 10, padding: "12px 16px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{t("已选")} {checkedIds.size} {t("条")}</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isAdmin(user) && <button onClick={onDuplicate} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #334155", background: "none", color: "#94a3b8", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{t("Duplicate")}</button>}
+          {isAdmin(user) && <button onClick={onDelete} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #7f1d1d", background: "#450a0a", color: "#fca5a5", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{t("Delete")}</button>}
+          <button onClick={onClear} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #334155", background: "none", color: "#64748b", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{t("Cancel")}</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <select value={field} onChange={e => { setField(e.target.value); setValue(""); }} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12, fontWeight: 600, outline: "none", minWidth: 160 }}>
+          <option value="">{t("选择要修改的字段")}</option>
+          <optgroup label={t("状态字段")}>
+            {statusFields.filter(f => canEditField(role, f.key)).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </optgroup>
+          <optgroup label={t("其他字段")}>
+            {textFields.filter(f => canEditField(role, f.key)).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </optgroup>
+        </select>
+        {field && selectedField && (
+          selectedField.options
+            ? <select value={value} onChange={e => setValue(e.target.value)} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12, fontWeight: 600, outline: "none", minWidth: 140 }}>
+                <option value="">{t("选择值")}</option>
+                {(field === "entry_done" ? [{v:"true",l:"✓ 已录单"},{v:"false",l:"✗ 未录单"}] : selectedField.options.map(o => ({v:o,l:o}))).map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            : <input type={selectedField.type || "text"} value={value} onChange={e => setValue(e.target.value)} placeholder={selectedField.label}
+                style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 12, fontWeight: 600, outline: "none", minWidth: 140 }} />
+        )}
+        {field && value && (
+          <button onClick={doApply} disabled={applying} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "#0ea5e9", color: "#fff", fontSize: 12, fontWeight: 700, cursor: applying ? "wait" : "pointer", opacity: applying ? 0.7 : 1 }}>
+            {applying ? "..." : `${t("应用到")} ${checkedIds.size} ${t("条")}`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Best-effort: when render returns React, fall back to a text representation.
