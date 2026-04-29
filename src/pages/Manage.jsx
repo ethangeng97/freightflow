@@ -263,6 +263,8 @@ function SimpleRefTab({ table, label, extraFields = [] }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: "", ...Object.fromEntries(extraFields.map(f => [f.key, ""])) });
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
 
   const load = useCallback(async () => {
     const { data } = await supabase.from(table).select("*").order("name");
@@ -280,9 +282,32 @@ function SimpleRefTab({ table, label, extraFields = [] }) {
     setForm({ name: "", ...Object.fromEntries(extraFields.map(f => [f.key, ""])) }); load();
   };
 
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditData({ name: item.name || "", ...Object.fromEntries(extraFields.map(f => [f.key, item[f.key] || ""])) });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const updates = {};
+    const item = items.find(i => i.id === editingId);
+    if (editData.name !== item.name) updates.name = editData.name;
+    extraFields.forEach(f => { if (editData[f.key] !== (item[f.key] || "")) updates[f.key] = editData[f.key] || null; });
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase.from(table).update(updates).eq("id", editingId);
+      if (error) { alert(error.message); return; }
+    }
+    setEditingId(null);
+    load();
+  };
+
+  const cancelEdit = () => { setEditingId(null); };
+
   const remove = async (id) => { if (!confirm("Delete?")) return; await supabase.from(table).delete().eq("id", id); load(); };
 
   if (loading) return <Spinner />;
+
+  const inputStyle = { width: "100%", padding: "5px 8px", border: "1px solid #bae6fd", borderRadius: 5, fontSize: 12, outline: "none", background: "#f0f9ff", boxSizing: "border-box" };
 
   return (
     <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: 14 }}>
@@ -298,15 +323,37 @@ function SimpleRefTab({ table, label, extraFields = [] }) {
           <thead><tr style={{ background: "#f8fafc" }}>
             <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0" }}>Name</th>
             {extraFields.map(f => <th key={f.key} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0" }}>{f.label}</th>)}
-            <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", width: 60 }}></th>
+            <th style={{ padding: "10px 12px", borderBottom: "1px solid #e2e8f0", width: 100 }}></th>
           </tr></thead>
           <tbody>
             {items.map((it, i) => (
               <tr key={it.id} style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <td style={{ padding: "9px 12px", fontWeight: 500 }}>{it.name}</td>
-                {extraFields.map(f => <td key={f.key} style={{ padding: "9px 12px", color: "#475569" }}>{it[f.key] || "—"}</td>)}
-                <td style={{ padding: "9px 12px" }}>
-                  <button onClick={() => remove(it.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>Del</button>
+                <td style={{ padding: "6px 12px" }}>
+                  {editingId === it.id
+                    ? <input style={inputStyle} value={editData.name} onChange={e => setEditData(p => ({ ...p, name: e.target.value }))} autoFocus />
+                    : <span style={{ fontWeight: 500, cursor: "pointer" }} onDoubleClick={() => startEdit(it)}>{it.name}</span>
+                  }
+                </td>
+                {extraFields.map(f => (
+                  <td key={f.key} style={{ padding: "6px 12px" }}>
+                    {editingId === it.id
+                      ? <input style={inputStyle} value={editData[f.key] || ""} onChange={e => setEditData(p => ({ ...p, [f.key]: e.target.value }))} />
+                      : <span style={{ color: "#475569", cursor: "pointer" }} onDoubleClick={() => startEdit(it)}>{it[f.key] || "—"}</span>
+                    }
+                  </td>
+                ))}
+                <td style={{ padding: "6px 12px", display: "flex", gap: 6 }}>
+                  {editingId === it.id ? (
+                    <>
+                      <button onClick={saveEdit} style={{ border: "none", background: "none", color: "#16a34a", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>✓</button>
+                      <button onClick={cancelEdit} style={{ border: "none", background: "none", color: "#94a3b8", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => startEdit(it)} style={{ border: "none", background: "none", color: "#0ea5e9", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>Edit</button>
+                      <button onClick={() => remove(it.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>Del</button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
