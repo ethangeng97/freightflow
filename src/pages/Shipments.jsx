@@ -199,6 +199,9 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
     if (type === "blPending")    setFilters(p => ({ ...p, bl_status: "Not Ready" }));
   };
 
+  const [showImport, setShowImport] = useState(false);
+
+  // ...existing code
   const selectedOrder = shipments.find(o => o.id === selectedId);
   const orderLogs = useMemo(() => selectedOrder ? logs.filter(l => l.shipment_id === selectedOrder.id) : logs, [logs, selectedOrder]);
 
@@ -228,6 +231,8 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
               <Button variant="secondary" onClick={() => setShowColMgr(true)}>⚙ {t("Columns")}</Button>
               {(role === "admin" || role === "customer") &&
                 <Button variant="secondary" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ {t("Export CSV")}</Button>}
+              {(role === "admin" || role === "operator" || role === "sales") &&
+                <Button variant="secondary" onClick={() => setShowImport(true)}>↑ {t("Import")}</Button>}
               {(role === "admin" || role === "operator" || role === "sales") &&
                 <Button onClick={() => setShowNew(true)}>+ {t("New Shipment")}</Button>}
             </div>
@@ -261,6 +266,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
       )}
 
       {showNew && <NewShipmentModal onClose={() => setShowNew(false)} onSave={handleCreate} refData={refData} role={role} />}
+      {showImport && <ImportModal onClose={() => setShowImport(false)} existingShipments={shipments} onDone={() => { setShowImport(false); loadShipments(); }} user={user} />}
       {showColMgr && <ColumnManager
         config={colConfig}
         hiddenKeys={[...maskedFields(role)]}
@@ -819,4 +825,159 @@ function extractTextFromCell(col, o) {
   if (col.key === "carrier") return o.carrier ? (o.carrier_agent ? `${o.carrier} (${o.carrier_agent})` : o.carrier) : "";
   // For Badge-rendered status fields, the underlying value is the field key itself
   return o[col.key] || "";
+}
+
+// =========================================================================
+// Import Modal — CSV bulk import with duplicate detection
+// =========================================================================
+function ImportModal({ onClose, existingShipments, onDone, user }) {
+  const [rows, setRows] = useState([]);
+  const [dupes, setDupes] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [fileName, setFileName] = useState("");
+
+  const FIELD_MAP = {
+    "po#": "po", "po": "po",
+    "customer po#": "customer_po", "customer po": "customer_po", "cust po#": "customer_po", "cust po": "customer_po", "customer_po": "customer_po",
+    "booking no": "booking_no", "booking": "booking_no", "booking_no": "booking_no",
+    "vessel": "vessel", "vessel name": "vessel",
+    "etd": "etd", "eta": "eta",
+    "pod": "pod", "pol": "pol",
+    "supplier": "supplier", "customer": "customer",
+    "end customer": "end_customer", "end_customer": "end_customer",
+    "tuc": "tuc", "description": "tuc", "tuc / description": "tuc",
+    "sku": "sku", "carrier": "carrier",
+    "container no": "container_no", "container_no": "container_no",
+    "qty container": "qty_container", "qty_container": "qty_container",
+    "qty packages": "qty_packages", "qty_packages": "qty_packages",
+    "weight": "weight", "weight (kg)": "weight",
+    "volume": "volume", "volume (m³)": "volume",
+    "incoterms": "incoterms",
+    "e-booking no": "e_booking_no", "e_booking_no": "e_booking_no",
+    "agent": "carrier_agent", "carrier_agent": "carrier_agent",
+    "supplier order no#": "supplier_order_no", "supplier_order_no": "supplier_order_no",
+    "crd date": "crd_date", "crd_date": "crd_date",
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.split("\n").filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const rawHeaders = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+    const headers = rawHeaders.map(h => FIELD_MAP[h.toLowerCase()] || null);
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].match(/("([^"]*)"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, "").trim()) || [];
+      const row = {};
+      headers.forEach((h, idx) => { if (h && vals[idx]) row[h] = vals[idx]; });
+      if (Object.keys(row).length > 0) data.push(row);
+    }
+    return data;
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResult(null);
+    if (!file.name.endsWith(".csv") && !file.name.endsWith(".tsv")) {
+      alert("请先将 Excel 文件另存为 CSV 格式再上传"); return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => checkDupes(parseCSV(ev.target.result));
+    reader.readAsText(file);
+  };
+
+  const checkDupes = (parsed) => {
+    const existingCPOs = new Set(existingShipments.map(s => String(s.customer_po || "")));
+    const duplicates = [], clean = [];
+    for (const row of parsed) {
+      const cpo = String(row.customer_po || "");
+      if (cpo && existingCPOs.has(cpo)) {
+        duplicates.push(row);
+      } else {
+        clean.push(row);
+        if (cpo) existingCPOs.add(cpo);
+      }
+    }
+    setRows(clean);
+    setDupes(duplicates);
+  };
+
+  const doImport = async () => {
+    if (rows.length === 0) return;
+    setImporting(true);
+    let success = 0, failed = 0;
+    // Batch insert in chunks of 20
+    for (let i = 0; i < rows.length; i += 20) {
+      const batch = rows.slice(i, i + 20);
+      try {
+        const { error } = await supabase.from("shipments").insert(batch);
+        if (error) { failed += batch.length; } else { success += batch.length; }
+      } catch (e) { failed += batch.length; }
+    }
+    setResult({ success, failed });
+    setImporting(false);
+    if (success > 0) setTimeout(() => onDone(), 1500);
+  };
+
+  const previewCols = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+  return (
+    <Modal onClose={onClose} title={t("Import")} width={900}
+      footer={<div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
+        {rows.length > 0 && !result && <Button onClick={doImport} disabled={importing}>{importing ? "..." : `${t("Import")} ${rows.length} ${t("条")}`}</Button>}
+      </div>}>
+
+      {!rows.length && !dupes.length && (
+        <div style={{ padding: "30px 0", textAlign: "center" }}>
+          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>上传 CSV 文件批量导入货件</p>
+          <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 16 }}>支持字段：PO#, Customer PO#, Booking No, Vessel, ETD, ETA, POL, POD, Supplier, Customer, Carrier 等</p>
+          <label style={{ display: "inline-block", padding: "10px 24px", borderRadius: 8, background: "#0ea5e9", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            选择 CSV 文件
+            <input type="file" accept=".csv,.tsv" onChange={handleFile} style={{ display: "none" }} />
+          </label>
+        </div>
+      )}
+
+      {dupes.length > 0 && (
+        <div style={{ background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: 8, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>⚠ {dupes.length} 条记录因 Customer PO# 重复被跳过：</div>
+          <div style={{ fontSize: 11, color: "#78350f", maxHeight: 100, overflowY: "auto" }}>
+            {dupes.map((d, i) => <div key={i}>Customer PO: {d.customer_po} — PO: {d.po || ""}</div>)}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div style={{ background: result.failed ? "#fef3c7" : "#d1fae5", border: `1px solid ${result.failed ? "#f59e0b" : "#10b981"}`, borderRadius: 8, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: result.failed ? "#92400e" : "#065f46" }}>
+            ✓ 导入完成：{result.success} 条成功{result.failed > 0 && `，${result.failed} 条失败`}
+          </div>
+        </div>
+      )}
+
+      {rows.length > 0 && !result && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 8 }}>预览 — {rows.length} 条待导入 {fileName && <span style={{ color: "#94a3b8", fontWeight: 400 }}>({fileName})</span>}</div>
+          <div style={{ maxHeight: 350, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead><tr>
+                {previewCols.map(c => <th key={c} style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, color: "#64748b", borderBottom: "1px solid #e2e8f0", background: "#f8fafc", position: "sticky", top: 0 }}>{c}</th>)}
+              </tr></thead>
+              <tbody>
+                {rows.slice(0, 50).map((row, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    {previewCols.map(c => <td key={c} style={{ padding: "5px 8px", color: "#0f172a" }}>{row[c] || "—"}</td>)}
+                  </tr>
+                ))}
+                {rows.length > 50 && <tr><td colSpan={previewCols.length} style={{ padding: 8, textAlign: "center", color: "#94a3b8" }}>...还有 {rows.length - 50} 条</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
 }

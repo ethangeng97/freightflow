@@ -67,6 +67,8 @@ const zh = {
   "Entry Number": "系统编号",
 
   // Buttons & UI
+  "Import": "导入",
+  "条": "条",
   "New Shipment": "新建货件",
   "Export CSV": "导出CSV",
   "Columns": "列设置",
