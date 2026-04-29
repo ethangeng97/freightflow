@@ -159,7 +159,16 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   };
 
   const handleUpdateItem = async (itemId, field, value) => {
-    await supabase.from("container_items").update({ [field]: value }).eq("id", itemId);
+    const numFields = ["qty", "weight", "volume"];
+    const v = numFields.includes(field) ? (value ? Number(value) : null) : value;
+    await supabase.from("container_items").update({ [field]: v }).eq("id", itemId);
+    setItems(prev => prev.map(it => it.id === itemId ? { ...it, [field]: v } : it));
+  };
+
+  const addEmptyRow = async () => {
+    const row = { container_id: container.id, supplier: "", po: "", customer_po: "", tuc: "", sku: "", qty: null, weight: null, volume: null, hbl: "", notes: "", sort_order: items.length };
+    const { error } = await supabase.from("container_items").insert(row);
+    if (error) alert(error.message);
     loadItems();
   };
 
@@ -271,31 +280,52 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                 <thead><tr style={{ background: "#fffbeb" }}>
                   {[t("Supplier"), "PO", "Customer PO", t("TUC"), "SKU", "QTY", t("Weight"), "CBM", "HBL", ""].map(h =>
-                    <th key={h} style={{ padding: "6px 6px", textAlign: "left", fontWeight: 600, color: "#92400e", fontSize: 10, borderBottom: "1px solid #fde68a" }}>{h}</th>
+                    <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#92400e", fontSize: 10, borderBottom: "2px solid #fde68a", whiteSpace: "nowrap" }}>{h}</th>
                   )}
                 </tr></thead>
                 <tbody>
-                  {items.map((it, i) => (
-                    <tr key={it.id} style={{ borderBottom: "1px solid #fef3c7" }}>
-                      <td style={{ padding: "6px", fontWeight: 600, color: "#0f172a" }}>{tSupplier(it.supplier) || "—"}</td>
-                      <td style={{ padding: "6px", fontFamily: "'DM Mono',monospace" }}>{it.po || "—"}</td>
-                      <td style={{ padding: "6px", fontFamily: "'DM Mono',monospace" }}>{it.customer_po || "—"}</td>
-                      <td style={{ padding: "6px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.tuc || "—"}</td>
-                      <td style={{ padding: "6px", fontFamily: "'DM Mono',monospace", fontSize: 10 }}>{it.sku || "—"}</td>
-                      <td style={{ padding: "6px", textAlign: "right" }}>{it.qty || "—"}</td>
-                      <td style={{ padding: "6px", textAlign: "right" }}>{it.weight || "—"}</td>
-                      <td style={{ padding: "6px", textAlign: "right" }}>{it.volume || "—"}</td>
-                      <td style={{ padding: "6px", fontFamily: "'DM Mono',monospace" }}>{it.hbl || "—"}</td>
-                      <td style={{ padding: "6px" }}>
-                        {canEdit && <button onClick={() => handleDeleteItem(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕</button>}
-                      </td>
+                  {items.map((it) => {
+                    const cs = { padding: "3px 2px" };
+                    const is_ = { width: "100%", padding: "4px 6px", border: "1px solid #fde68a", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace", background: canEdit ? "#fffbeb" : "transparent" };
+                    return (
+                      <tr key={it.id} style={{ borderBottom: "1px solid #fef3c7" }}>
+                        <td style={cs}><input style={{ ...is_, width: 90 }} value={it.supplier || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "supplier", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 90 }} value={it.po || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "po", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 80 }} value={it.customer_po || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "customer_po", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 140 }} value={it.tuc || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "tuc", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 90, fontSize: 10 }} value={it.sku || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "sku", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" value={it.qty ?? ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "qty", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 65, textAlign: "right" }} type="number" step="0.01" value={it.weight ?? ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "weight", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" step="0.01" value={it.volume ?? ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "volume", e.target.value)} /></td>
+                        <td style={cs}><input style={{ ...is_, width: 80 }} value={it.hbl || ""} readOnly={!canEdit} onChange={e => handleUpdateItem(it.id, "hbl", e.target.value)} /></td>
+                        <td style={cs}>
+                          {canEdit && <button onClick={() => handleDeleteItem(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {items.length > 0 && (
+                    <tr style={{ background: "#fffbeb", fontWeight: 700 }}>
+                      <td colSpan={5} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#92400e" }}>{t("Total")}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalQty}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalWeight.toFixed(1)}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalVolume.toFixed(2)}</td>
+                      <td colSpan={2} />
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           )
         }
+
+        {/* Quick add buttons */}
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <Button small variant="secondary" onClick={addEmptyRow}>+ {t("新增行")}</Button>
+            <Button small variant="accent" onClick={() => setShowAddItem(true)}>+ {t("从货件选择")}</Button>
+          </div>
+        )}
 
         {/* Summary */}
         {items.length > 0 && (
