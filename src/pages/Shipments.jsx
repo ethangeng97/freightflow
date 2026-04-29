@@ -729,7 +729,7 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const emptyRow = { po: shipment.po || "", customer_po: shipment.customer_po || "", sku: "", tuc: "", hs_code: "", booked_packages: "", packing_unit: "CTNS", booked_weight: "", booked_volume: "", marks: "", booking_no: "", container_no: "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
+  const emptyRow = { po: shipment.po || "", customer_po: shipment.customer_po || "", sku: "", tuc: "", hs_code: "", booked_packages: null, packing_unit: "CTNS", booked_weight: null, booked_volume: null, marks: "", booking_no: shipment.booking_no || "", container_no: shipment.container_no || "", container_type: "40HQ", supplier: shipment.supplier || "", notes: "" };
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("loading_details").select("*").eq("shipment_id", shipment.id).order("sort_order").order("created_at");
@@ -740,6 +740,10 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
   const addRow = async () => {
     setSaving(true);
     const row = { ...emptyRow, shipment_id: shipment.id, sort_order: items.length };
+    // Clean empty strings to null for non-text fields
+    for (const k of Object.keys(row)) {
+      if (row[k] === "") row[k] = null;
+    }
     const { error } = await supabase.from("loading_details").insert(row);
     if (error) alert(error.message);
     setSaving(false); load();
