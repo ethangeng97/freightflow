@@ -829,8 +829,8 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
                       {cell("hs_code", 90)}
                       {cell("booked_packages", 70, { type: "number", sm: true })}
                       {cell("packing_unit", 50)}
-                      {cell("booked_weight", 70, { type: "number", step: "0.01", sm: true })}
-                      {cell("booked_volume", 70, { type: "number", step: "0.01", sm: true })}
+                      {cell("booked_weight", 70, { type: "number", step: "0.0001", sm: true })}
+                      {cell("booked_volume", 70, { type: "number", step: "0.0001", sm: true })}
                       {cell("marks", 70)}
                       {cell("booking_no", 100)}
                       {cell("container_no", 80)}
@@ -849,8 +849,8 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
                     <td colSpan={5} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
                     <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.pkgs}</td>
                     <td />
-                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(2)}</td>
-                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(2)}</td>
+                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(4)}</td>
+                    <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(4)}</td>
                     <td colSpan={6} />
                   </tr>
                 )}

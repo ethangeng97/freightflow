@@ -301,8 +301,8 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
                         {cell("tuc", 140)}
                         {cell("sku", 90)}
                         {cell("qty", 60, { type: "number", align: "right" })}
-                        {cell("weight", 65, { type: "number", step: "0.01", align: "right" })}
-                        {cell("volume", 60, { type: "number", step: "0.01", align: "right" })}
+                        {cell("weight", 65, { type: "number", step: "0.0001", align: "right" })}
+                        {cell("volume", 60, { type: "number", step: "0.0001", align: "right" })}
                         {cell("hbl", 80)}
                         <td style={cs}>
                           {canEdit && <button onClick={() => handleDeleteItem(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button>}
@@ -314,8 +314,8 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
                     <tr style={{ background: "#fffbeb", fontWeight: 700 }}>
                       <td colSpan={5} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#92400e" }}>{t("Total")}</td>
                       <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalQty}</td>
-                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalWeight.toFixed(1)}</td>
-                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalVolume.toFixed(2)}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalWeight.toFixed(4)}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalVolume.toFixed(4)}</td>
                       <td colSpan={2} />
                     </tr>
                   )}
@@ -341,12 +341,12 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
               {Object.entries(supplierSummary).map(([s, d]) => (
                 <div key={s} style={{ background: "#fff", borderRadius: 6, padding: "6px 10px", border: "1px solid #fde68a" }}>
                   <span style={{ fontWeight: 600, color: "#0f172a" }}>{tSupplier(s)}</span>
-                  <span style={{ color: "#64748b", marginLeft: 8 }}>{d.count} items · {d.qty} pcs · {d.weight.toFixed(1)} kg · {d.volume.toFixed(2)} m³</span>
+                  <span style={{ color: "#64748b", marginLeft: 8 }}>{d.count} items · {d.qty} pcs · {d.weight.toFixed(4)} kg · {d.volume.toFixed(4)} m³</span>
                 </div>
               ))}
             </div>
             <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: "#0f172a" }}>
-              {t("Total")}: {totalQty} pcs · {totalWeight.toFixed(1)} kg · {totalVolume.toFixed(2)} m³
+              {t("Total")}: {totalQty} pcs · {totalWeight.toFixed(4)} kg · {totalVolume.toFixed(4)} m³
             </div>
           </div>
         )}
@@ -514,8 +514,8 @@ function NewContainerModal({ types, onClose, onSave }) {
                 <td colSpan={5} style={{ padding: "6px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.qty}</td>
                 <td />
-                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(1)}</td>
-                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(2)}</td>
+                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(4)}</td>
+                <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(4)}</td>
                 <td colSpan={2} />
               </tr>
             </tbody>
