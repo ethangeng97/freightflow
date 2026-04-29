@@ -67,6 +67,7 @@ const zh = {
   "Entry Number": "系统编号",
 
   // Buttons & UI
+  "未设置": "未设置",
   "Import": "导入",
   "条": "条",
   "已选": "已选",

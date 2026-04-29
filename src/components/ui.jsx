@@ -27,7 +27,7 @@ export const SectionHeader = ({ icon, title, accent, right }) => (
   </div>
 );
 
-export const FilterDropdown = ({ label, value, options, onChange }) => {
+export const FilterDropdown = ({ label, value, options, onChange, optionLabels }) => {
   const isActive = value !== "All";
   return (
     <select value={value} onChange={e => onChange(e.target.value)} style={{
@@ -39,7 +39,7 @@ export const FilterDropdown = ({ label, value, options, onChange }) => {
       backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
     }}>
       <option value="All">{label}</option>
-      {options.map(o => <option key={o}>{o}</option>)}
+      {options.map(o => <option key={o} value={o}>{(optionLabels && optionLabels[o]) || o}</option>)}
     </select>
   );
 };

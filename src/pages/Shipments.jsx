@@ -98,7 +98,11 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   // Filtered list
   const customerList = useMemo(() => [...new Set(shipments.map(o => o.customer).filter(Boolean))], [shipments]);
   const filtered = useMemo(() => shipments.filter((o) => {
-    for (const key of Object.keys(STATUS_CONFIGS)) { if (filters[key] !== "All" && o[key] !== filters[key]) return false; }
+    for (const key of Object.keys(STATUS_CONFIGS)) {
+      if (filters[key] === "All") continue;
+      if (filters[key] === "__empty__") { if (o[key]) return false; } // 未设置
+      else if (o[key] !== filters[key]) return false;
+    }
     if (filters.customer !== "All" && o.customer !== filters.customer) return false;
     if (filters.entry_done === "已录入" && !o.entry_done) return false;
     if (filters.entry_done === "未录入" && o.entry_done) return false;
@@ -306,7 +310,7 @@ function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, 
         <input placeholder="Search PO#, product, SKU..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ padding: "6px 10px", borderRadius: 6, border: search ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 180, outline: "none", background: search ? "#f0f9ff" : "#fff" }} />
         {Object.entries(STATUS_CONFIGS).map(([key, cfg]) =>
-          <FilterDropdown key={key} label={t(cfg.label)} value={filters[key]} options={cfg.options} onChange={v => setFilters(p => ({ ...p, [key]: v }))} />
+          <FilterDropdown key={key} label={t(cfg.label)} value={filters[key]} options={[...cfg.options, "__empty__"]} optionLabels={{ "__empty__": t("未设置") }} onChange={v => setFilters(p => ({ ...p, [key]: v }))} />
         )}
         {!masked.has("entry_done") &&
           <FilterDropdown label={t("Entry")} value={filters.entry_done} options={["已录入", "未录入"]} onChange={v => setFilters(p => ({ ...p, entry_done: v }))} />}
@@ -951,6 +955,11 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
     "agent": "carrier_agent", "carrier_agent": "carrier_agent",
     "supplier order no#": "supplier_order_no", "supplier_order_no": "supplier_order_no",
     "crd date": "crd_date", "crd_date": "crd_date",
+    "qc status": "qc_status", "qc_status": "qc_status",
+    "space status": "space_status", "space_status": "space_status",
+    "payment": "local_payment", "local_payment": "local_payment", "local payment": "local_payment",
+    "telex release": "telex_release", "telex_release": "telex_release", "telex": "telex_release",
+    "bl status": "bl_status", "bl_status": "bl_status", "b/l status": "bl_status",
   };
 
   const parseCSV = (text) => {
