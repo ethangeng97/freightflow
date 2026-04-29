@@ -773,9 +773,17 @@ function LoadingDetailModal({ shipment, onClose, onSaved }) {
     if (!ld || ld.length === 0) return;
     const bookings = [...new Set(ld.map(d => d.booking_no).filter(Boolean))].join(", ");
     const containers = [...new Set(ld.map(d => d.container_no).filter(Boolean))].join(", ");
+    // Count unique containers by container_no + container_type
+    const uniqueCtrs = {};
+    ld.forEach(d => {
+      if (d.container_no) {
+        const key = d.container_no;
+        if (!uniqueCtrs[key]) uniqueCtrs[key] = d.container_type || "40HQ";
+      }
+    });
     const typeCount = {};
-    ld.forEach(d => { if (d.container_type) typeCount[d.container_type] = (typeCount[d.container_type] || 0) + 1; });
-    const qtyStr = Object.entries(typeCount).map(([t, c]) => `${c}x${t}`).join(", ");
+    Object.values(uniqueCtrs).forEach(t => { typeCount[t] = (typeCount[t] || 0) + 1; });
+    const qtyStr = Object.entries(typeCount).map(([t, c]) => `${c}x${t}`).join(", ") || "";
     const updates = {};
     if (bookings) updates.booking_no = bookings;
     if (containers) updates.container_no = containers;
