@@ -358,24 +358,21 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
 }
 
 // =========================================================================
-// New Container Modal — PO-first flow
+// New Container Modal — container_no/seal_no per line, auto-grouping
 // =========================================================================
 function NewContainerModal({ types, onClose, onSave }) {
   const [shipments, setShipments] = useState([]);
   const [poSearch, setPoSearch] = useState("");
-  const [lines, setLines] = useState([]); // loading items
-  const [containerNo, setContainerNo] = useState("");
-  const [sealNo, setSealNo] = useState("");
-  const [typeId, setTypeId] = useState("");
+  const [lines, setLines] = useState([]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     supabase.from("shipments").select("id,po,customer_po,tuc,sku,supplier,customer,end_customer,qty_packages,weight,volume,booking_no,e_booking_no,vessel,carrier,carrier_agent,pol,pod,etd,eta")
       .order("created_at", { ascending: false }).then(({ data }) => setShipments(data || []));
   }, []);
 
-  // Derived container-level info from first line that has it
   const derived = useMemo(() => {
     const d = { booking_no: "", e_booking_no: "", vessel: "", carrier: "", carrier_agent: "", pol: "", pod: "", etd: "", eta: "", customer: "" };
     for (const ln of lines) {
@@ -405,65 +402,115 @@ function NewContainerModal({ types, onClose, onSave }) {
 
   const addFromShipment = (s) => {
     setLines(prev => [...prev, {
+      container_no: "", seal_no: "",
       supplier: s.supplier || "", po: s.po || "", customer_po: s.customer_po || "",
       tuc: s.tuc || "", sku: s.sku || "", hs_code: "", qty: s.qty_packages || "",
       packing_unit: "CTNS", weight: s.weight || "", volume: s.volume || "",
       hbl: "", shipment_id: s.id, _src: s,
     }]);
     setPoSearch("");
+    setError("");
   };
 
   const addEmptyLine = () => {
-    setLines(prev => [...prev, { supplier: "", po: "", customer_po: "", tuc: "", sku: "", hs_code: "", qty: "", packing_unit: "CTNS", weight: "", volume: "", hbl: "", _src: {} }]);
+    setLines(prev => [...prev, { container_no: "", seal_no: "", supplier: "", po: "", customer_po: "", tuc: "", sku: "", hs_code: "", qty: "", packing_unit: "CTNS", weight: "", volume: "", hbl: "", _src: {} }]);
   };
 
   const updateLine = (idx, field, value) => {
     setLines(prev => prev.map((ln, i) => i === idx ? { ...ln, [field]: value } : ln));
+    setError("");
   };
 
   const removeLine = (idx) => {
     setLines(prev => prev.filter((_, i) => i !== idx));
+    setError("");
   };
+
+  // Validate container_no + seal_no consistency
+  const validation = useMemo(() => {
+    const pairs = new Map(); // container_no -> seal_no
+    const sealToCtr = new Map(); // seal_no -> container_no
+    for (const ln of lines) {
+      const cno = (ln.container_no || "").trim();
+      const sno = (ln.seal_no || "").trim();
+      if (!cno && !sno) continue;
+      if (cno && sno) {
+        if (pairs.has(cno) && pairs.get(cno) !== sno) return { ok: false, msg: `柜号 ${cno} 有不同封号：${pairs.get(cno)} 和 ${sno}` };
+        if (sealToCtr.has(sno) && sealToCtr.get(sno) !== cno) return { ok: false, msg: `封号 ${sno} 对应不同柜号：${sealToCtr.get(sno)} 和 ${cno}` };
+        pairs.set(cno, sno);
+        sealToCtr.set(sno, cno);
+      }
+    }
+    // Group by container_no
+    const groups = {};
+    for (const ln of lines) {
+      const key = (ln.container_no || "").trim() || "__no_ctr__";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(ln);
+    }
+    const containerCount = Object.keys(groups).filter(k => k !== "__no_ctr__").length || (lines.length > 0 ? 1 : 0);
+    return { ok: true, groups, containerCount, pairs };
+  }, [lines]);
 
   const submit = async () => {
     if (lines.length === 0) { alert(t("请至少添加一行装柜明细")); return; }
+    if (!validation.ok) { setError(validation.msg); return; }
     setSaving(true);
-    // Create container
-    const cData = {
-      container_no: containerNo || null, seal_no: sealNo || null, type_id: typeId || null, notes: notes || null,
-      booking_no: derived.booking_no || null, e_booking_no: derived.e_booking_no || null,
-      vessel: derived.vessel || null, carrier: derived.carrier || null, carrier_agent: derived.carrier_agent || null,
-      pol: derived.pol || null, pod: derived.pod || null, customer: derived.customer || null,
-      etd: derived.etd || null, eta: derived.eta || null,
-    };
-    if (!cData.type_id) delete cData.type_id;
-    if (!cData.etd) delete cData.etd;
-    if (!cData.eta) delete cData.eta;
-    const { data: created, error } = await supabase.from("containers").insert(cData).select("id").single();
-    if (error || !created) { alert("Error: " + (error?.message || "Failed")); setSaving(false); return; }
-    // Create items
-    const items = lines.map((ln, i) => ({
-      container_id: created.id, shipment_id: ln.shipment_id || null,
-      supplier: ln.supplier || null, po: ln.po || null, customer_po: ln.customer_po || null,
-      tuc: ln.tuc || null, sku: ln.sku || null,
-      qty: ln.qty ? Number(ln.qty) : null, weight: ln.weight ? Number(ln.weight) : null, volume: ln.volume ? Number(ln.volume) : null,
-      hbl: ln.hbl || null, sort_order: i,
-    }));
-    const { error: itemErr } = await supabase.from("container_items").insert(items);
-    if (itemErr) alert("Items error: " + itemErr.message);
+
+    // Group lines by container_no (or all in one if no container_no specified)
+    const groups = {};
+    for (const ln of lines) {
+      const key = (ln.container_no || "").trim() || "__default__";
+      if (!groups[key]) groups[key] = { container_no: ln.container_no?.trim() || null, seal_no: ln.seal_no?.trim() || null, items: [] };
+      groups[key].items.push(ln);
+      if (ln.seal_no?.trim() && !groups[key].seal_no) groups[key].seal_no = ln.seal_no.trim();
+    }
+
+    // Auto-detect type
+    const supplierCount = new Set(lines.map(l => l.supplier).filter(Boolean)).size;
+    const poCount = new Set(lines.map(l => l.po).filter(Boolean)).size;
+    const isConsole = supplierCount > 1 || poCount > 1;
+    const consoleTid = types.find(t => t.name === "Console Box")?.id;
+    const fclTid = types.find(t => t.name === "FCL")?.id;
+
+    for (const [key, grp] of Object.entries(groups)) {
+      const cData = {
+        container_no: grp.container_no, seal_no: grp.seal_no,
+        type_id: isConsole ? consoleTid : fclTid, notes: notes || null,
+        booking_no: derived.booking_no || null, e_booking_no: derived.e_booking_no || null,
+        vessel: derived.vessel || null, carrier: derived.carrier || null,
+        carrier_agent: derived.carrier_agent || null,
+        pol: derived.pol || null, pod: derived.pod || null,
+        customer: derived.customer || null,
+        etd: derived.etd || null, eta: derived.eta || null,
+        qty_container: `1x40HQ`,
+      };
+      if (!cData.type_id) delete cData.type_id;
+      if (!cData.etd) delete cData.etd;
+      if (!cData.eta) delete cData.eta;
+
+      const { data: created, error: cErr } = await supabase.from("containers").insert(cData).select("id").single();
+      if (cErr || !created) { alert("Container error: " + (cErr?.message || "Failed")); setSaving(false); return; }
+
+      const items = grp.items.map((ln, i) => ({
+        container_id: created.id, shipment_id: ln.shipment_id || null,
+        supplier: ln.supplier || null, po: ln.po || null, customer_po: ln.customer_po || null,
+        tuc: ln.tuc || null, sku: ln.sku || null,
+        qty: ln.qty ? Number(ln.qty) : null, weight: ln.weight ? Number(ln.weight) : null,
+        volume: ln.volume ? Number(ln.volume) : null, hbl: ln.hbl || null, sort_order: i,
+      }));
+      await supabase.from("container_items").insert(items);
+    }
     setSaving(false);
     onSave();
   };
 
   const totals = lines.reduce((t, ln) => ({ qty: t.qty + (Number(ln.qty) || 0), wt: t.wt + (Number(ln.weight) || 0), vol: t.vol + (Number(ln.volume) || 0) }), { qty: 0, wt: 0, vol: 0 });
-  const supplierCount = new Set(lines.map(l => l.supplier).filter(Boolean)).size;
-  const autoType = supplierCount > 1 || lines.length > 1 ? "Console Box" : "FCL";
 
   const is_ = { padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" };
 
   return (
-    <Modal onClose={onClose} title={t("New Container")} width={1050}>
-      {/* Step 1: Add PO lines */}
+    <Modal onClose={onClose} title={t("New Container")} width={1200}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 6 }}>1. {t("添加装柜明细")} — {t("搜索 PO / Customer PO / 品名...")}</div>
         <div style={{ position: "relative" }}>
@@ -485,35 +532,34 @@ function NewContainerModal({ types, onClose, onSave }) {
         </div>
       </div>
 
-      {/* Lines table */}
       {lines.length > 0 && (
         <div style={{ overflowX: "auto", marginBottom: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead><tr style={{ background: "#f0f9ff" }}>
-              {[t("Supplier"), "PO", "Cust PO", t("TUC"), "HS Code", "QTY (CTNS)", t("包装"), t("Weight"), "CBM", "HBL", ""].map(h =>
+              {[t("柜号"), t("封号"), t("Supplier"), "PO", "Cust PO", t("TUC"), "HS Code", "QTY (CTNS)", t("Weight"), "CBM", "HBL", ""].map(h =>
                 <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#0369a1", fontSize: 10, borderBottom: "2px solid #bae6fd", whiteSpace: "nowrap" }}>{h}</th>
               )}
             </tr></thead>
             <tbody>
               {lines.map((ln, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 85, background: "#fffbeb", border: "1px solid #fde68a" }} value={ln.container_no} onChange={e => updateLine(i, "container_no", e.target.value)} placeholder="CNTR" /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70, background: "#fffbeb", border: "1px solid #fde68a" }} value={ln.seal_no} onChange={e => updateLine(i, "seal_no", e.target.value)} placeholder="Seal" /></td>
                   <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 85 }} value={ln.supplier} onChange={e => updateLine(i, "supplier", e.target.value)} /></td>
                   <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 90, fontWeight: 600, color: "#0369a1" }} value={ln.po} onChange={e => updateLine(i, "po", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 75 }} value={ln.customer_po} onChange={e => updateLine(i, "customer_po", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 130 }} value={ln.tuc} onChange={e => updateLine(i, "tuc", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 80 }} value={ln.hs_code || ""} onChange={e => updateLine(i, "hs_code", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70 }} value={ln.customer_po} onChange={e => updateLine(i, "customer_po", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 120 }} value={ln.tuc} onChange={e => updateLine(i, "tuc", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70 }} value={ln.hs_code || ""} onChange={e => updateLine(i, "hs_code", e.target.value)} /></td>
                   <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" value={ln.qty} onChange={e => updateLine(i, "qty", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 45 }} value={ln.packing_unit} onChange={e => updateLine(i, "packing_unit", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" step="0.01" value={ln.weight} onChange={e => updateLine(i, "weight", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" step="0.01" value={ln.volume} onChange={e => updateLine(i, "volume", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 75 }} value={ln.hbl || ""} onChange={e => updateLine(i, "hbl", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" step="0.0001" value={ln.weight} onChange={e => updateLine(i, "weight", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" step="0.0001" value={ln.volume} onChange={e => updateLine(i, "volume", e.target.value)} /></td>
+                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70 }} value={ln.hbl || ""} onChange={e => updateLine(i, "hbl", e.target.value)} /></td>
                   <td style={{ padding: "3px 2px" }}><button onClick={() => removeLine(i)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button></td>
                 </tr>
               ))}
               <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
-                <td colSpan={5} style={{ padding: "6px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
+                <td colSpan={7} style={{ padding: "6px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.qty}</td>
-                <td />
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(4)}</td>
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(4)}</td>
                 <td colSpan={2} />
@@ -526,22 +572,23 @@ function NewContainerModal({ types, onClose, onSave }) {
         </div>
       )}
 
-      {/* Step 2: Container info — auto-derived + manual fields */}
-      {lines.length > 0 && (
+      {/* Validation error */}
+      {(error || !validation.ok) && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+          ⚠ {error || validation.msg}
+        </div>
+      )}
+
+      {/* Container summary info */}
+      {lines.length > 0 && validation.ok && (
         <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 8 }}>2. {t("柜子信息")} <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400 }}>({autoType})</span></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-            <Input label={t("Container No")} value={containerNo} onChange={e => setContainerNo(e.target.value)} />
-            <Input label={t("Seal No")} value={sealNo} onChange={e => setSealNo(e.target.value)} />
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("Type")}</div>
-              <select value={typeId} onChange={e => setTypeId(e.target.value)} style={{ width: "100%", padding: "7px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none" }}>
-                <option value="">—</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <Input label={t("Notes")} value={notes} onChange={e => setNotes(e.target.value)} />
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 8 }}>
+            2. {t("柜子信息")} — {validation.containerCount || 1} {t("个柜")}
+            {validation.containerCount > 1
+              ? <span style={{ color: "#f59e0b", marginLeft: 8 }}>Console Box</span>
+              : <span style={{ color: "#10b981", marginLeft: 8 }}>FCL</span>}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginTop: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
             <Field label="Booking" value={derived.booking_no || "—"} />
             <Field label="Vessel" value={derived.vessel || "—"} />
             <Field label="Carrier" value={derived.carrier || "—"} />
@@ -551,12 +598,15 @@ function NewContainerModal({ types, onClose, onSave }) {
             <Field label="ETD" value={derived.etd || "—"} />
             <Field label="Customer" value={derived.customer || "—"} />
           </div>
+          <div style={{ marginTop: 8 }}>
+            <Input label={t("Notes")} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("备注（短出/剩余空间等）")} />
+          </div>
         </div>
       )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
-        <Button onClick={submit} disabled={saving || lines.length === 0}>{saving ? "..." : t("Save")}</Button>
+        <Button onClick={submit} disabled={saving || lines.length === 0 || !validation.ok}>{saving ? "..." : `${t("Save")} (${validation.containerCount || 1} ${t("个柜")})`}</Button>
       </div>
     </Modal>
   );
