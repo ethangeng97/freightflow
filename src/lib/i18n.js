@@ -171,6 +171,7 @@ const zh = {
 
 let _role = "admin"; // default English
 let _supplierCnMap = {}; // english name → chinese name
+let _customerShortMap = {}; // 委托单位 full name → name_short
 
 export function setI18nRole(role) {
   _role = role;
@@ -178,6 +179,20 @@ export function setI18nRole(role) {
 
 export function setSupplierCnMap(map) {
   _supplierCnMap = map || {};
+}
+
+// Map from customers.name (full 委托单位 name) to customers.name_short.
+// Used to render portal "Supplier" as the short name of shipments.customer.
+export function setCustomerShortMap(map) {
+  _customerShortMap = map || {};
+}
+
+// Resolve portal's "Supplier" display: name_short of shipments.customer.
+// Falls back to the raw shipments.supplier value (post-backfill) when the
+// customer is missing from the dictionary.
+export function tCustomerShort(customerName, supplierFallback) {
+  if (customerName && _customerShortMap[customerName]) return _customerShortMap[customerName];
+  return supplierFallback || null;
 }
 
 export function t(key) {

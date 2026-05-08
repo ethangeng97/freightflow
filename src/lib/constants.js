@@ -35,7 +35,7 @@ export const STATUS_COLORS = {
 export const FIELD_LABELS = {
   qc_status: "QC Status", space_status: "Space Status", local_payment: "Local Payment",
   telex_release: "Telex Release", incoterms: "Incoterms", crd_date: "CRD Date",
-  supplier: "Supplier", customer: "Customer", end_customer: "End Customer",
+  supplier: "Supplier", customer: "Customer", overseas_agent: "Customer", end_customer: "End Customer",
   po: "PO#", customer_po: "Customer PO#", supplier_order_no: "Supplier Order No#",
   tuc: "Description (TUC)", sku: "SKU", qty_packages: "QTY (Packages)",
   weight: "Weight (kg)", volume: "Volume (m³)", e_booking_no: "E-Booking No",

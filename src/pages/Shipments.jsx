@@ -6,7 +6,7 @@ import { NotesPanel } from "../components/NotesPanel.jsx";
 import { STATUS_CONFIGS, FIELD_LABELS } from "../lib/constants.js";
 import { SHIPMENT_COLUMNS, COLUMN_MAP, defaultColumnConfig, reconcileColumnConfig, applyRoleMask } from "../lib/columns.jsx";
 import { isAdmin, canEditField, maskedFields } from "../lib/permissions.js";
-import { t, tSupplier, setSupplierCnMap } from "../lib/i18n.js";
+import { t, tSupplier, setSupplierCnMap, tCustomerShort, setCustomerShortMap } from "../lib/i18n.js";
 
 // =========================================================================
 // Shipments Page (entry)
@@ -27,7 +27,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", carrier: "All", entry_done: "All" });
+  const [filters, setFilters] = useState({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", overseas_agent: "All", carrier: "All", entry_done: "All" });
   const [textFilters, setTextFilters] = useState({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
   const [checkedIds, setCheckedIds] = useState(new Set());
   const [pageSize, setPageSize] = useState(50);
@@ -38,7 +38,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   useEffect(() => {
     if (statFilter && statFilter !== statFilterApplied.current) {
       statFilterApplied.current = statFilter;
-      const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", carrier: "All", entry_done: "All" };
+      const base = { qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", overseas_agent: "All", carrier: "All", entry_done: "All" };
       if (statFilter.entry_done) {
         base.entry_done = statFilter.entry_done;
       } else {
@@ -65,21 +65,26 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   const loadRefData = useCallback(async () => {
     const [s, cu, ca, p, ec] = await Promise.all([
       supabase.from("suppliers").select("*").order("name"),
-      supabase.from("customers").select("name").order("name"),
+      supabase.from("customers").select("name,name_short").order("name"),
       supabase.from("carriers").select("*").order("name"),
       supabase.from("ports").select("name,code").order("name"),
       supabase.from("end_customers").select("name").order("name"),
     ]);
+    const customerShortMap = Object.fromEntries(
+      (cu.data || []).filter(x => x.name_short).map(x => [x.name, x.name_short])
+    );
     setRefData({
       suppliers:    (s.data || []).map(x => x.name),
       supplierCnMap: Object.fromEntries((s.data || []).filter(x => x.name_cn).map(x => [x.name, x.name_cn])),
       customers:    (cu.data || []).map(x => x.name),
+      customerShortMap,
       carriers:     (ca.data || []).map(x => x.name),
       carriersWithAgents: ca.data || [],
       ports:        (p.data || []).map(x => `${x.name} (${x.code})`),
       endCustomers: (ec.data || []).map(x => x.name),
     });
     setSupplierCnMap(Object.fromEntries((s.data || []).filter(x => x.name_cn).map(x => [x.name, x.name_cn])));
+    setCustomerShortMap(customerShortMap);
   }, []);
   const loadColConfig = useCallback(async () => {
     const { data } = await supabase.from("column_preferences")
@@ -98,7 +103,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   };
 
   // Filtered list
-  const customerList = useMemo(() => [...new Set(shipments.map(o => o.customer).filter(Boolean))], [shipments]);
+  const overseasAgentList = useMemo(() => [...new Set(shipments.map(o => o.overseas_agent).filter(Boolean))], [shipments]);
   const carrierList = useMemo(() => [...new Set(shipments.map(o => o.carrier).filter(Boolean))].sort(), [shipments]);
   const filtered = useMemo(() => shipments.filter((o) => {
     for (const key of Object.keys(STATUS_CONFIGS)) {
@@ -106,7 +111,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
       if (filters[key] === "__empty__") { if (o[key]) return false; } // 未设置
       else if (o[key] !== filters[key]) return false;
     }
-    if (filters.customer !== "All" && o.customer !== filters.customer) return false;
+    if (filters.overseas_agent !== "All" && o.overseas_agent !== filters.overseas_agent) return false;
     if (filters.carrier !== "All" && o.carrier !== filters.carrier) return false;
     if (filters.entry_done === "已录入" && !o.entry_done) return false;
     if (filters.entry_done === "未录入" && o.entry_done) return false;
@@ -117,7 +122,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
     if (textFilters.supplier && !(o.supplier || "").toLowerCase().includes(textFilters.supplier.toLowerCase())) return false;
     if (search) {
       const s = search.toLowerCase();
-      return [o.po, o.tuc, o.sku, o.carrier, o.customer_po, o.customer, o.supplier, o.booking_no, o.vessel, o.container_no]
+      return [o.po, o.tuc, o.sku, o.carrier, o.customer_po, o.overseas_agent, o.customer, o.supplier, o.booking_no, o.vessel, o.container_no]
         .some(v => (v || "").toLowerCase().includes(s));
     }
     return true;
@@ -134,7 +139,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
     Object.values(textFilters).filter(v => v).length +
     (search ? 1 : 0);
   const clearFilters = () => {
-    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", customer: "All", carrier: "All", entry_done: "All" });
+    setFilters({ qc_status: "All", space_status: "All", local_payment: "All", telex_release: "All", incoterms: "All", bl_status: "All", overseas_agent: "All", carrier: "All", entry_done: "All" });
     setTextFilters({ booking_no: "", container_no: "", vessel: "", end_customer: "", supplier: "" });
     setSearch("");
   };
@@ -255,7 +260,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
             role={role} search={search} setSearch={setSearch}
             filters={filters} setFilters={setFilters}
             textFilters={textFilters} setTextFilters={setTextFilters}
-            customerList={customerList} carrierList={carrierList}
+            overseasAgentList={overseasAgentList} carrierList={carrierList}
             activeFilterCount={activeFilterCount} clearFilters={clearFilters}
           />
 
@@ -327,7 +332,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
 // =========================================================================
 // Filter Bar
 // =========================================================================
-function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, setTextFilters, customerList, carrierList, activeFilterCount, clearFilters }) {
+function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, setTextFilters, overseasAgentList, carrierList, activeFilterCount, clearFilters }) {
   const masked = maskedFields(role);
   return (
     <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "12px 14px", marginBottom: 14 }}>
@@ -340,8 +345,8 @@ function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, 
         )}
         {!masked.has("entry_done") &&
           <FilterDropdown label={t("Entry")} value={filters.entry_done} options={["已录入", "未录入"]} onChange={v => setFilters(p => ({ ...p, entry_done: v }))} />}
-        {!masked.has("customer") &&
-          <FilterDropdown label="Customer" value={filters.customer} options={customerList} onChange={v => setFilters(p => ({ ...p, customer: v }))} />}
+        {!masked.has("overseas_agent") &&
+          <FilterDropdown label="Customer" value={filters.overseas_agent} options={overseasAgentList} onChange={v => setFilters(p => ({ ...p, overseas_agent: v }))} />}
         <FilterDropdown label="Carrier" value={filters.carrier} options={carrierList} onChange={v => setFilters(p => ({ ...p, carrier: v }))} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
@@ -548,8 +553,8 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
-              <EditableField label={t("Supplier")} field="supplier" options={refData?.suppliers} />
-              {!masked.has("customer")     && <EditableField label={t("Customer")} field="customer" options={refData?.customers} />}
+              <Field label={t("Supplier")} value={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
+              {!masked.has("overseas_agent") && <EditableField label={t("Customer")} field="overseas_agent" options={refData?.customers} />}
               {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} />}
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #f59e0b" : "1px solid #e2e8f0" }}>
@@ -648,7 +653,7 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
   const [form, setForm] = useState({
     qc_status: "Under Review", space_status: "Wait Info", local_payment: "Waiting",
     telex_release: "Pending", incoterms: "FOB", bl_status: "Not Ready",
-    crd_date: "", supplier: "", customer: "", end_customer: "", po: "", customer_po: "",
+    crd_date: "", overseas_agent: "", end_customer: "", po: "", customer_po: "",
     supplier_order_no: "", tuc: "", sku: "", qty_packages: "", weight: "", volume: "",
     e_booking_no: "", booking_no: "", pol: "", pod: "", carrier: "", carrier_agent: "",
     etd: "", qty_container: "", container_no: "", eta: "", vessel: "",
@@ -677,9 +682,8 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
         <Input label="Customer PO#" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} />
         <Input label="Supplier Order No#" value={form.supplier_order_no} onChange={e => set("supplier_order_no", e.target.value)} />
 
-        <SelOrInput label="Supplier" field="supplier" form={form} set={set} options={refData.suppliers} />
-        {!masked.has("customer")     && <SelOrInput label="Customer" field="customer" form={form} set={set} options={refData.customers} />}
-        {!masked.has("end_customer") && <SelOrInput label="End Customer" field="end_customer" form={form} set={set} options={refData.endCustomers} />}
+        {!masked.has("overseas_agent") && <SelOrInput label="Customer" field="overseas_agent" form={form} set={set} options={refData.customers} />}
+        {!masked.has("end_customer")   && <SelOrInput label="End Customer" field="end_customer" form={form} set={set} options={refData.endCustomers} />}
 
         <div style={{ gridColumn: "span 2" }}><Input label="TUC / Description" value={form.tuc} onChange={e => set("tuc", e.target.value)} /></div>
         <Input label="SKU" value={form.sku} onChange={e => set("sku", e.target.value)} />
@@ -902,8 +906,7 @@ function BatchUpdateBar({ checkedIds, role, user, onClear, onUpdate, onDelete, o
   // All batch-editable fields grouped
   const statusFields = Object.entries(STATUS_CONFIGS).map(([k, v]) => ({ key: k, label: t(v.label), options: v.options }));
   const textFields = [
-    { key: "supplier", label: t("Supplier"), options: refData?.suppliers },
-    { key: "customer", label: t("Customer"), options: refData?.customers },
+    { key: "overseas_agent", label: t("Customer"), options: refData?.customers },
     { key: "end_customer", label: t("End Customer"), options: refData?.endCustomers },
     { key: "carrier", label: t("Carrier"), options: refData?.carriers },
     { key: "carrier_agent", label: t("Agent") },
@@ -1133,7 +1136,8 @@ function ShipmentLoadingFromContainers({ order, role, onContainerInfo }) {
 
 // Best-effort: when render returns React, fall back to a text representation.
 function extractTextFromCell(col, o) {
-  if (col.key === "supplier") return tSupplier(o.supplier) || "";
+  if (col.key === "supplier") return tCustomerShort(o.customer, o.supplier) || tSupplier(o.supplier) || "";
+  if (col.key === "overseas_agent") return o.overseas_agent || "";
   if (col.key === "route")   return o.pol && o.pod ? `${(o.pol || "").split("(")[0].trim()} -> ${(o.pod || "").split("(")[0].trim()}` : "";
   if (col.key === "carrier") return o.carrier ? (o.carrier_agent ? `${o.carrier} (${o.carrier_agent})` : o.carrier) : "";
   // For Badge-rendered status fields, the underlying value is the field key itself
@@ -1157,7 +1161,7 @@ function ImportModal({ onClose, existingShipments, onDone, user }) {
     "vessel": "vessel", "vessel name": "vessel",
     "etd": "etd", "eta": "eta",
     "pod": "pod", "pol": "pol",
-    "supplier": "supplier", "customer": "customer",
+    "supplier": "supplier", "customer": "overseas_agent", "overseas agent": "overseas_agent", "overseas_agent": "overseas_agent",
     "end customer": "end_customer", "end_customer": "end_customer",
     "tuc": "tuc", "description": "tuc", "tuc / description": "tuc",
     "sku": "sku", "carrier": "carrier",
