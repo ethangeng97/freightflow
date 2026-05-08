@@ -562,7 +562,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
               <Field label={t("Supplier")} value={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
-              {!masked.has("overseas_agent") && <EditableField label={role === "customer" ? t("Customer") : "海外代理"} field="overseas_agent" options={refData?.overseasAgents} />}
+              {!masked.has("overseas_agent") && <EditableField label={t("Customer")} field="overseas_agent" options={refData?.overseasAgents} />}
               {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} />}
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #f59e0b" : "1px solid #e2e8f0" }}>
@@ -692,8 +692,8 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
         <Input label="Customer PO#" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} />
         <Input label="Supplier Order No#" value={form.supplier_order_no} onChange={e => set("supplier_order_no", e.target.value)} />
 
-        {!masked.has("overseas_agent") && <SelOrInput label={role === "customer" ? "Customer" : "海外代理"} field="overseas_agent" form={form} set={set} options={refData.overseasAgents} />}
-        {role !== "customer"           && <SelOrInput label="委托单位" field="customer" form={form} set={set} options={refData.customerShortOptions} />}
+        {!masked.has("overseas_agent") && <SelOrInput label="Customer" field="overseas_agent" form={form} set={set} options={refData.overseasAgents} />}
+        {role !== "customer"           && <SelOrInput label="Supplier" field="customer" form={form} set={set} options={refData.customerShortOptions} />}
         {!masked.has("end_customer")   && <SelOrInput label="End Customer" field="end_customer" form={form} set={set} options={refData.endCustomers} />}
 
         <div style={{ gridColumn: "span 2" }}><Input label="TUC / Description" value={form.tuc} onChange={e => set("tuc", e.target.value)} /></div>
