@@ -8,13 +8,15 @@ export const isSales    = (u) => u?.profile?.role === "sales";
 export const isOperator = (u) => u?.profile?.role === "operator";
 export const isCustomer = (u) => u?.profile?.role === "customer";
 
-// Fields that the operator/sales must NOT see in the UI (per spec: customer-side masking).
-// Portal's "Customer" UI field is bound to shipments.overseas_agent (海外代理); sales
-// sees their own overseas agents, operator does not see overseas_agent or end_customer.
+// Per-role field visibility in the UI.
+//   Ops view (admin/operator/sales): shows 海外代理 (overseas_agent) and 委托单位 (customer/supplier),
+//   hides end_customer (that field exists only so portal customers can identify their own orders).
+//   Portal customer view: shows customer/end_customer/supplier; hides entry status.
 export function maskedFields(role) {
-  if (role === "operator") return new Set(["overseas_agent", "end_customer"]);
+  if (role === "admin")    return new Set(["end_customer"]);
+  if (role === "operator") return new Set(["end_customer"]);
   if (role === "sales")    return new Set(["end_customer"]);
-  if (role === "customer") return new Set(["entry_done", "entry_number"]); // customer cannot see entry status
+  if (role === "customer") return new Set(["entry_done", "entry_number"]);
   return new Set();
 }
 

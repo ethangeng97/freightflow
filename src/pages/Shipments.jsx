@@ -15,7 +15,7 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
   const role = user.profile?.role;
   const [shipments, setShipments] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [refData, setRefData] = useState({ suppliers: [], customers: [], carriers: [], carriersWithAgents: [], ports: [], endCustomers: [] });
+  const [refData, setRefData] = useState({ suppliers: [], customers: [], customerShortOptions: [], overseasAgents: [], carriers: [], carriersWithAgents: [], ports: [], endCustomers: [] });
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -63,21 +63,29 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
     setLogs(data || []);
   }, [role]);
   const loadRefData = useCallback(async () => {
-    const [s, cu, ca, p, ec] = await Promise.all([
+    const [s, cu, ca, p, ec, oa] = await Promise.all([
       supabase.from("suppliers").select("*").order("name"),
       supabase.from("customers").select("name,name_short").order("name"),
       supabase.from("carriers").select("*").order("name"),
       supabase.from("ports").select("name,code").order("name"),
       supabase.from("end_customers").select("name").order("name"),
+      supabase.from("overseas_agents").select("name").order("name"),
     ]);
     const customerShortMap = Object.fromEntries(
       (cu.data || []).filter(x => x.name_short).map(x => [x.name, x.name_short])
     );
+    // 委托单位 picker: display short name, store full name (drives shipments.supplier trigger).
+    const customerShortOptions = (cu.data || [])
+      .filter(x => x.name_short && x.name_short.trim() !== "")
+      .map(x => ({ value: x.name, label: x.name_short }))
+      .sort((a, b) => a.label.localeCompare(b.label));
     setRefData({
       suppliers:    (s.data || []).map(x => x.name),
       supplierCnMap: Object.fromEntries((s.data || []).filter(x => x.name_cn).map(x => [x.name, x.name_cn])),
       customers:    (cu.data || []).map(x => x.name),
       customerShortMap,
+      customerShortOptions,
+      overseasAgents: (oa.data || []).map(x => x.name),
       carriers:     (ca.data || []).map(x => x.name),
       carriersWithAgents: ca.data || [],
       ports:        (p.data || []).map(x => `${x.name} (${x.code})`),
@@ -554,7 +562,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
               <Field label={t("Supplier")} value={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
-              {!masked.has("overseas_agent") && <EditableField label={t("Customer")} field="overseas_agent" options={refData?.customers} />}
+              {!masked.has("overseas_agent") && <EditableField label={role === "customer" ? t("Customer") : "海外代理"} field="overseas_agent" options={refData?.overseasAgents} />}
               {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} />}
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #f59e0b" : "1px solid #e2e8f0" }}>
@@ -650,10 +658,12 @@ function LogsView({ logs }) {
 // =========================================================================
 function NewShipmentModal({ onClose, onSave, refData, role }) {
   const masked = maskedFields(role);
+  // Default overseas_agent: when there's exactly one agent in the master table, pre-select it.
+  const defaultAgent = (refData.overseasAgents?.length === 1) ? refData.overseasAgents[0] : "";
   const [form, setForm] = useState({
     qc_status: "Under Review", space_status: "Wait Info", local_payment: "Waiting",
     telex_release: "Pending", incoterms: "FOB", bl_status: "Not Ready",
-    crd_date: "", overseas_agent: "", end_customer: "", po: "", customer_po: "",
+    crd_date: "", overseas_agent: defaultAgent, end_customer: "", customer: "", po: "", customer_po: "",
     supplier_order_no: "", tuc: "", sku: "", qty_packages: "", weight: "", volume: "",
     e_booking_no: "", booking_no: "", pol: "", pod: "", carrier: "", carrier_agent: "",
     etd: "", qty_container: "", container_no: "", eta: "", vessel: "",
@@ -682,7 +692,8 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
         <Input label="Customer PO#" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} />
         <Input label="Supplier Order No#" value={form.supplier_order_no} onChange={e => set("supplier_order_no", e.target.value)} />
 
-        {!masked.has("overseas_agent") && <SelOrInput label="Customer" field="overseas_agent" form={form} set={set} options={refData.customers} />}
+        {!masked.has("overseas_agent") && <SelOrInput label={role === "customer" ? "Customer" : "海外代理"} field="overseas_agent" form={form} set={set} options={refData.overseasAgents} />}
+        {role !== "customer"           && <SelOrInput label="委托单位" field="customer" form={form} set={set} options={refData.customerShortOptions} />}
         {!masked.has("end_customer")   && <SelOrInput label="End Customer" field="end_customer" form={form} set={set} options={refData.endCustomers} />}
 
         <div style={{ gridColumn: "span 2" }}><Input label="TUC / Description" value={form.tuc} onChange={e => set("tuc", e.target.value)} /></div>
@@ -718,10 +729,12 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
 }
 
 // SelOrInput: render a select if options provided, else a free-text input.
+// Accepts options as either string[] or {value,label}[].
 function SelOrInput({ label, field, form, set, options }) {
   if (options && options.length > 0) {
+    const opts = options.map(o => typeof o === "string" ? { value: o, label: o } : o);
     return <Select label={label} value={form[field]} onChange={e => set(field, e.target.value)}
-      options={[{ value: "", label: "Select..." }, ...options.map(o => ({ value: o, label: o }))]} />;
+      options={[{ value: "", label: "Select..." }, ...opts]} />;
   }
   return <Input label={label} value={form[field]} onChange={e => set(field, e.target.value)} />;
 }
@@ -906,7 +919,7 @@ function BatchUpdateBar({ checkedIds, role, user, onClear, onUpdate, onDelete, o
   // All batch-editable fields grouped
   const statusFields = Object.entries(STATUS_CONFIGS).map(([k, v]) => ({ key: k, label: t(v.label), options: v.options }));
   const textFields = [
-    { key: "overseas_agent", label: t("Customer"), options: refData?.customers },
+    { key: "overseas_agent", label: t("Customer"), options: refData?.overseasAgents },
     { key: "end_customer", label: t("End Customer"), options: refData?.endCustomers },
     { key: "carrier", label: t("Carrier"), options: refData?.carriers },
     { key: "carrier_agent", label: t("Agent") },
