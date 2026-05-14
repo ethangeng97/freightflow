@@ -107,6 +107,28 @@ export function ContainersPage({ user }) {
 }
 
 // =========================================================================
+// EditField — 必须在 ContainerDetail 之外定义，否则每次 setState 会重建
+// 组件引用，React 卸载/重挂 input，导致打字时光标失焦
+// =========================================================================
+function EditField({ label, field, type, options, editing, ed, setEd, container }) {
+  if (!editing) return <Field label={label} value={container[field]} />;
+  if (options) return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
+      <select value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box" }}>
+        <option value="">—</option>{options.map(o => <option key={typeof o === "object" ? o.id : o} value={typeof o === "object" ? o.id : o}>{typeof o === "object" ? o.name : o}</option>)}
+      </select>
+    </div>
+  );
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
+      <input type={type || "text"} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
+    </div>
+  );
+}
+
+// =========================================================================
 // Container Detail
 // =========================================================================
 function ContainerDetail({ container, types, typeMap, role, user, onBack, onReload }) {
@@ -196,24 +218,6 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   const poCount = new Set(items.map(i => i.po).filter(Boolean)).size;
   const autoType = supplierCount > 1 || poCount > 1 ? "Console Box" : "FCL";
 
-  const EditField = ({ label, field, type, options }) => {
-    if (!editing) return <Field label={label} value={container[field]} />;
-    if (options) return (
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-        <select value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box" }}>
-          <option value="">—</option>{options.map(o => <option key={typeof o === "object" ? o.id : o} value={typeof o === "object" ? o.id : o}>{typeof o === "object" ? o.name : o}</option>)}
-        </select>
-      </div>
-    );
-    return (
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-        <input type={type || "text"} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
-      </div>
-    );
-  };
-
   return (
     <div>
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 0", border: "none", background: "none", color: "#0ea5e9", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>← {t("Back")}</button>
@@ -237,26 +241,26 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #0ea5e9" : "1px solid #e2e8f0" }}>
           <SectionHeader icon="📦" title={t("Container Info")} accent="#0ea5e9" />
-          <EditField label={t("Container No")} field="container_no" />
-          <EditField label={t("QTY (Container)")} field="qty_container" />
-          <EditField label={t("Seal No")} field="seal_no" />
-          <EditField label={t("Type")} field="type_id" options={types} />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Container No")} field="container_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("QTY (Container)")} field="qty_container" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Seal No")} field="seal_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Type")} field="type_id" options={types} />
         </div>
         <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #6366f1" : "1px solid #e2e8f0" }}>
           <SectionHeader icon="🚢" title={t("Shipping Details")} accent="#6366f1" />
-          <EditField label={t("Booking No")} field="booking_no" />
-          <EditField label={t("E-Booking No")} field="e_booking_no" />
-          <EditField label={t("Vessel")} field="vessel" />
-          <EditField label={t("Carrier")} field="carrier" />
-          <EditField label={t("Agent")} field="carrier_agent" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Booking No")} field="booking_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("E-Booking No")} field="e_booking_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Vessel")} field="vessel" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Carrier")} field="carrier" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Agent")} field="carrier_agent" />
         </div>
         <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
           <SectionHeader icon="🗺" title={t("Route & Dates")} accent="#10b981" />
-          <EditField label="POL" field="pol" />
-          <EditField label="POD" field="pod" />
-          <EditField label="ETD" field="etd" type="date" />
-          <EditField label="ETA" field="eta" type="date" />
-          <EditField label={t("Customer")} field="customer" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="POL" field="pol" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="POD" field="pod" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="ETD" field="etd" type="date" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="ETA" field="eta" type="date" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Customer")} field="customer" />
         </div>
       </div>
 
