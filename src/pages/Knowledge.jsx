@@ -12,9 +12,19 @@ export function KnowledgePage({ user, defaultTab, supplierOnly }) {
   const [search, setSearch] = useState("");
   const [allNotes, setAllNotes] = useState([]);
 
-  const tableMap = { customer: "customers", supplier: "suppliers", shipment: "shipments" };
-  const labelField = { customer: "name", supplier: "name", shipment: "po" };
-  const descField  = { customer: "contact_name", supplier: "name_cn", shipment: "tuc" };
+  const tableMap = { customer: "customers", supplier: "suppliers", shipment: "shipments", endcustomer: "end_customers" };
+  const labelField = { customer: "name", supplier: "name", shipment: "po", endcustomer: "name" };
+  const descField  = { customer: "contact_name", supplier: "name_cn", shipment: "tuc", endcustomer: null };
+
+  const [newName, setNewName] = useState("");
+  const addEndCustomer = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    const { error } = await supabase.from("end_customers").insert({ name });
+    if (error) { alert(error.message); return; }
+    setNewName("");
+    loadEntities();
+  };
 
   const loadEntities = useCallback(async () => {
     setLoading(true);
@@ -51,7 +61,7 @@ export function KnowledgePage({ user, defaultTab, supplierOnly }) {
       <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         {!supplierOnly && (
           <div style={{ display: "flex", border: "1px solid #e2e8f0", borderRadius: 7, overflow: "hidden" }}>
-            {[{ k: "customer", l: t("Customers") }, { k: "supplier", l: t("Suppliers") }, { k: "shipment", l: t("Shipments") }].map((tb) => (
+            {[{ k: "customer", l: t("Customers") }, { k: "supplier", l: t("Suppliers") }, { k: "endcustomer", l: t("End Customers") }, { k: "shipment", l: t("Shipments") }].map((tb) => (
               <button key={tb.k} onClick={() => setEntityType(tb.k)} style={{
                 padding: "7px 16px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
                 background: entityType === tb.k ? "#0ea5e9" : "#fff", color: entityType === tb.k ? "#fff" : "#64748b",
@@ -60,6 +70,12 @@ export function KnowledgePage({ user, defaultTab, supplierOnly }) {
           </div>
         )}
         <Input placeholder={t("Search...")} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
+        {entityType === "endcustomer" && !supplierOnly && (
+          <>
+            <Input placeholder={t("新 End Customer 名称")} value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addEndCustomer(); }} style={{ width: 220 }} />
+            <button onClick={addEndCustomer} disabled={!newName.trim()} style={{ padding: "6px 14px", border: "none", borderRadius: 6, background: newName.trim() ? "#0ea5e9" : "#cbd5e1", color: "#fff", fontSize: 12, fontWeight: 600, cursor: newName.trim() ? "pointer" : "not-allowed" }}>+ {t("新增")}</button>
+          </>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 14 }}>
