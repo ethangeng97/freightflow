@@ -456,8 +456,18 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
   const ed = (field) => editing ? editData[field] || "" : null;
   const setEd = (field, val) => setEditData(p => ({ ...p, [field]: val }));
 
-  const EditableField = ({ label, field, type, options }) => {
+  const EditableField = ({ label, field, type, options, combo }) => {
     if (!editing) return <Field label={label} value={displayOrder[field]} />;
+    if (options && combo) {
+      const listId = `dl-${field}`;
+      return (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
+          <input type={type || "text"} list={listId} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
+          <datalist id={listId}>{options.map(o => <option key={o} value={o} />)}</datalist>
+        </div>
+      );
+    }
     if (options) {
       return (
         <div style={{ marginBottom: 8 }}>
@@ -579,8 +589,8 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0 24px" }}>
               <EditableField label={t("E-Booking No")} field="e_booking_no" />
               <EditableField label={t("Booking No")} field="booking_no" />
-              <EditableField label={t("POL")} field="pol" options={refData?.ports} />
-              <EditableField label={t("POD")} field="pod" options={refData?.ports} />
+              <EditableField label={t("POL")} field="pol" options={refData?.ports} combo />
+              <EditableField label={t("POD")} field="pod" options={refData?.ports} combo />
               <EditableField label={t("Carrier")} field="carrier" options={refData?.carriers} />
               <EditableField label={t("Agent")} field="carrier_agent" />
               <EditableField label={t("Container No")} field="container_no" />
@@ -704,8 +714,8 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
         <Input label="CRD Date" type="date" value={form.crd_date} onChange={e => set("crd_date", e.target.value)} />
         <Select label="Incoterms" value={form.incoterms} onChange={e => set("incoterms", e.target.value)} options={STATUS_CONFIGS.incoterms.options} />
 
-        <SelOrInput label="POL" field="pol" form={form} set={set} options={refData.ports} />
-        <SelOrInput label="POD" field="pod" form={form} set={set} options={refData.ports} />
+        <SelOrInput label="POL" field="pol" form={form} set={set} options={refData.ports} combo />
+        <SelOrInput label="POD" field="pod" form={form} set={set} options={refData.ports} combo />
         <Select label="Carrier" value={form.carrier} onChange={e => { set("carrier", e.target.value); set("carrier_agent", ""); }}
           options={[{ value: "", label: "Select..." }, ...refData.carriers.map(c => ({ value: c, label: c }))]} />
         {agentOpts.length > 0
@@ -730,7 +740,19 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
 
 // SelOrInput: render a select if options provided, else a free-text input.
 // Accepts options as either string[] or {value,label}[].
-function SelOrInput({ label, field, form, set, options }) {
+function SelOrInput({ label, field, form, set, options, combo }) {
+  if (options && options.length > 0 && combo) {
+    const listId = `dl-form-${field}`;
+    return (
+      <>
+        <Input label={label} list={listId} value={form[field]} onChange={e => set(field, e.target.value)} />
+        <datalist id={listId}>{options.map(o => {
+          const v = typeof o === "string" ? o : o.value;
+          return <option key={v} value={v} />;
+        })}</datalist>
+      </>
+    );
+  }
   if (options && options.length > 0) {
     const opts = options.map(o => typeof o === "string" ? { value: o, label: o } : o);
     return <Select label={label} value={form[field]} onChange={e => set(field, e.target.value)}
