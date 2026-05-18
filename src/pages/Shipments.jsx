@@ -456,15 +456,18 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
   const ed = (field) => editing ? editData[field] || "" : null;
   const setEd = (field, val) => setEditData(p => ({ ...p, [field]: val }));
 
-  const EditableField = ({ label, field, type, options, combo }) => {
-    if (!editing) return <Field label={label} value={displayOrder[field]} />;
+  const EditableField = ({ label, field, type, options, combo, displayValue }) => {
+    if (!editing) return <Field label={label} value={displayValue !== undefined ? displayValue : displayOrder[field]} />;
     if (options && combo) {
       const listId = `dl-${field}`;
       return (
         <div style={{ marginBottom: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
           <input type={type || "text"} list={listId} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
-          <datalist id={listId}>{options.map(o => <option key={o} value={o} />)}</datalist>
+          <datalist id={listId}>{options.map(o => {
+            const v = typeof o === "string" ? o : o.value;
+            return <option key={v} value={v} />;
+          })}</datalist>
         </div>
       );
     }
@@ -473,7 +476,11 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
         <div style={{ marginBottom: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
           <select value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box" }}>
-            <option value="">—</option>{options.map(o => <option key={o} value={o}>{o}</option>)}
+            <option value="">—</option>{options.map(o => {
+              const v = typeof o === "string" ? o : o.value;
+              const l = typeof o === "string" ? o : o.label;
+              return <option key={v} value={v}>{l}</option>;
+            })}
           </select>
         </div>
       );
@@ -571,7 +578,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
             </div>
             <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
               <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
-              <Field label={t("Supplier")} value={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
+              <EditableField label={t("Supplier")} field="customer" options={refData?.customerShortOptions} displayValue={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
               {!masked.has("overseas_agent") && <EditableField label={t("Customer")} field="overseas_agent" options={refData?.overseasAgents} />}
               {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} />}
             </div>
