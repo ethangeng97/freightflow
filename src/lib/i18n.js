@@ -224,6 +224,16 @@ const zh = {
   "MSDS": "MSDS",
   "FCR": "FCR",
   "Other Document": "其它",
+  // ── Bills / Invoices (supplier 侧) ──
+  "Unpaid": "未付清",
+  "Paid": "已付清",
+  "All": "全部",
+  "bills": "张账单",
+  "Items": "明细数",
+  "paid": "已付",
+  "Kind": "类型",
+  "Excl. Tax": "未税额",
+  "Tax": "税额",
 
   // ── Knowledge ──
   "No items found": "暂无数据",
