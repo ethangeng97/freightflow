@@ -234,6 +234,12 @@ const zh = {
   "Kind": "类型",
   "Excl. Tax": "未税额",
   "Tax": "税额",
+  // ── Telex Release 新字段 ──
+  "B/L No": "提单号",
+  "B/L No required": "提单号必填",
+  "Telex Guarantee Letter": "电放保函",
+  "Guarantee file required": "电放保函必传",
+  "Telex guarantee template hint": "可在「下载电放保函模板」获取标准模板",
 
   // ── Knowledge ──
   "No items found": "暂无数据",
