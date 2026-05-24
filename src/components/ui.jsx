@@ -1,45 +1,61 @@
+import { useState, useMemo, useRef, useEffect } from "react";
 import { STATUS_COLORS } from "../lib/constants.js";
+import { t } from "../lib/i18n.js";
 
+// 统一徽章 —— 沿用 STATUS_COLORS 调色板但风格统一（无圆点、紧凑、可换 i18n）
 export const Badge = ({ value, small }) => {
-  const c = STATUS_COLORS[value] || { bg: "#f1f5f9", color: "#475569", dot: "#94a3b8" };
+  const c = STATUS_COLORS[value] || { bg: "#f3f4f6", color: "#6b7280" };
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: small ? "2px 7px" : "3px 10px", borderRadius: 6, background: c.bg, color: c.color, fontSize: small ? 10.5 : 11.5, fontWeight: 600, whiteSpace: "nowrap" }}>
-      <span style={{ width: small ? 5 : 6, height: small ? 5 : 6, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
-      {value}
+    <span style={{
+      display: "inline-block",
+      padding: small ? "1px 8px" : "2px 10px",
+      borderRadius: 10,
+      background: c.bg, color: c.color,
+      fontSize: 11, fontWeight: 500, whiteSpace: "nowrap",
+      lineHeight: 1.6,
+    }}>
+      {t(value)}
     </span>
   );
 };
 
 export const Field = ({ label, value }) => (
-  <div style={{ marginBottom: 12 }}>
-    <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-    <div style={{ fontSize: 13, fontWeight: 500, color: value ? "#1e293b" : "#cbd5e1" }}>{value || "—"}</div>
+  <div style={{ marginBottom: 10 }}>
+    <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 2 }}>{label}</div>
+    <div style={{ fontSize: 13, color: value ? "var(--shell-text)" : "var(--shell-text-3)" }}>{value || "—"}</div>
   </div>
 );
 
-export const SectionHeader = ({ icon, title, accent, right }) => (
-  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingBottom: 10, borderBottom: `2px solid ${accent || "#e2e8f0"}` }}>
+export const SectionHeader = ({ icon, title, right }) => (
+  <div style={{
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 12, paddingBottom: 10,
+    borderBottom: "1px solid var(--shell-border-2)",
+  }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      {icon && <span style={{ fontSize: 15 }}>{icon}</span>}
-      <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{title}</span>
+      {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
+      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--shell-text)" }}>{title}</span>
     </div>
     {right}
   </div>
 );
 
+// 筛选下拉 —— 与 .field-select 一致风格，激活时蓝边
 export const FilterDropdown = ({ label, value, options, onChange, optionLabels }) => {
   const isActive = value !== "All";
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{
-      padding: "6px 28px 6px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500, outline: "none", cursor: "pointer",
-      border: isActive ? "2px solid #0ea5e9" : "1px solid #e2e8f0",
-      background: isActive ? "#f0f9ff" : "#fff", color: isActive ? "#0369a1" : "#64748b",
-      appearance: "none",
-      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
-      backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
+    <select className="field-select" value={value} onChange={e => onChange(e.target.value)} style={{
+      width: "auto",
+      minWidth: 110,
+      fontSize: 12,
+      padding: "5px 8px",
+      borderColor: isActive ? "var(--shell-primary)" : undefined,
+      background: isActive ? "var(--shell-primary-50)" : undefined,
+      color: isActive ? "var(--shell-primary)" : undefined,
+      fontWeight: isActive ? 500 : 400,
     }}>
       <option value="All">{label}</option>
-      {options.map(o => <option key={o} value={o}>{(optionLabels && optionLabels[o]) || o}</option>)}
+      {options.map(o => <option key={o} value={o}>{(optionLabels && optionLabels[o]) || t(o)}</option>)}
     </select>
   );
 };
@@ -94,6 +110,109 @@ export const Select = ({ label, options, ...rest }) => (
     </select>
   </div>
 );
+
+// Combobox: input-with-suggestions. Type-to-filter (prefix > substring), free-text allowed.
+// On empty/focused state, shows recently-used items first (tracked in localStorage by recentKey).
+// options accepts string[] or {value,label}[].
+const COMBO_RECENT_LIMIT = 5;
+const comboLoadRecents = (key) => {
+  if (!key) return [];
+  try { return JSON.parse(localStorage.getItem(`combo-recent-${key}`)) || []; }
+  catch { return []; }
+};
+const comboBumpRecent = (key, value) => {
+  if (!key || !value) return;
+  try {
+    const cur = comboLoadRecents(key);
+    const next = [value, ...cur.filter(v => v !== value)].slice(0, COMBO_RECENT_LIMIT);
+    localStorage.setItem(`combo-recent-${key}`, JSON.stringify(next));
+  } catch {}
+};
+
+export const Combobox = ({ label, value, onChange, options = [], recentKey, placeholder, inputStyle, dropdownStyle, fontMono }) => {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const wrapRef = useRef(null);
+  const norm = useMemo(
+    () => (options || []).map(o => typeof o === "string" ? { value: o, label: o } : o),
+    [options]
+  );
+
+  const filtered = useMemo(() => {
+    const q = (value || "").trim().toLowerCase();
+    const recents = comboLoadRecents(recentKey);
+    if (!q) {
+      const recentSet = new Set(recents);
+      const recentItems = recents.map(r => norm.find(o => o.value === r)).filter(Boolean);
+      const others = norm.filter(o => !recentSet.has(o.value));
+      return [...recentItems, ...others].slice(0, 50);
+    }
+    const scored = [];
+    for (const o of norm) {
+      const lv = String(o.label).toLowerCase();
+      const vv = String(o.value).toLowerCase();
+      let score;
+      if (lv.startsWith(q) || vv.startsWith(q)) score = 100;
+      else if (lv.includes(q) || vv.includes(q)) score = 50;
+      else continue;
+      if (recents.includes(o.value)) score += 5;
+      scored.push({ ...o, score });
+    }
+    scored.sort((a, b) => b.score - a.score || String(a.label).localeCompare(String(b.label)));
+    return scored.slice(0, 50);
+  }, [value, norm, recentKey]);
+
+  useEffect(() => { setHi(0); }, [value]);
+  useEffect(() => {
+    const onDoc = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const commit = (v) => { onChange(v); comboBumpRecent(recentKey, v); setOpen(false); };
+
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHi(h => Math.min(h + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHi(h => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") { if (open && filtered[hi]) { e.preventDefault(); commit(filtered[hi].value); } }
+    else if (e.key === "Escape") { setOpen(false); }
+  };
+
+  const baseInput = { width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: fontMono ? "'DM Mono',monospace" : undefined };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      {label && <label style={{ fontSize:10, fontWeight:600, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5, marginBottom:3, display:"block" }}>{label}</label>}
+      <input
+        type="text"
+        value={value || ""}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { setTimeout(() => setOpen(false), 120); if (value) comboBumpRecent(recentKey, value); }}
+        onKeyDown={onKey}
+        placeholder={placeholder}
+        autoComplete="off"
+        style={{ ...baseInput, ...inputStyle }}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 50, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, maxHeight: 240, overflowY: "auto", boxShadow: "0 6px 18px rgba(15,23,42,0.12)", ...dropdownStyle }}>
+          {filtered.map((o, i) => (
+            <div
+              key={o.value}
+              onMouseDown={(e) => { e.preventDefault(); commit(o.value); }}
+              onMouseEnter={() => setHi(i)}
+              style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer", background: i === hi ? "#f0f9ff" : "#fff", color: i === hi ? "#0c4a6e" : "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const Spinner = ({ label = "Loading..." }) => (
   <div style={{ textAlign: "center", padding: 60, color: "#94a3b8", fontSize: 13 }}>{label}</div>

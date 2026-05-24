@@ -1,12 +1,14 @@
+// 客户管理 — list / pipeline / detail / quote editor
+// 重构：用 shell.css 类替换 inline 样式 + ui.jsx 旧组件
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../supabase.js";
-import { Button, Input, Select, Spinner, EmptyState, Tag, Modal, SectionHeader, Badge } from "../components/ui.jsx";
 import { NotesPanel } from "../components/NotesPanel.jsx";
 import { isCustomer } from "../lib/permissions.js";
+import { t } from "../lib/i18n.js";
 
-// =========================================================================
-// Customers Page (entry)
-// =========================================================================
+// ============================================================
+// CustomersPage (entry)
+// ============================================================
 export function CustomersPage({ user }) {
   const [view, setView] = useState("list"); // list | pipeline
   const [selectedId, setSelectedId] = useState(null);
@@ -22,15 +24,13 @@ export function CustomersPage({ user }) {
       supabase.from("customers").select("*").order("name"),
       supabase.from("pipeline_stages").select("*").order("sort_order"),
     ]);
-    setCustomers(cs || []);
-    setStages(ss || []);
+    setCustomers(cs || []); setStages(ss || []);
     setLoading(false);
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
 
   const selected = customers.find((c) => c.id === selectedId);
-
   if (selected) {
     return <CustomerDetail customer={selected} stages={stages} user={user}
       onBack={() => setSelectedId(null)} onSaved={reload} />;
@@ -44,62 +44,80 @@ export function CustomersPage({ user }) {
   );
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Customers</h1>
-          <p style={{ fontSize: 12, color: "#94a3b8", margin: "3px 0 0" }}>{customers.length} customers · {stages.length} pipeline stages</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ display: "flex", border: "1px solid #e2e8f0", borderRadius: 7, overflow: "hidden" }}>
-            {["list", "pipeline"].map((v) => (
-              <button key={v} onClick={() => setView(v)} style={{
-                padding: "7px 14px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: view === v ? "#0ea5e9" : "#fff", color: view === v ? "#fff" : "#64748b",
-              }}>{v === "list" ? "List" : "Pipeline"}</button>
-            ))}
-          </div>
-          <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: 180 }} />
-          {!isCustomer(user) && <Button onClick={() => setShowNew(true)}>+ New Customer</Button>}
-        </div>
+    <>
+      <h1 className="page-title">{t("Customers")}</h1>
+
+      {/* view 切换 tab */}
+      <Tabs value={view} onChange={setView} options={[
+        { k: "list",     l: t("List") },
+        { k: "pipeline", l: t("Pipeline") },
+      ]} />
+
+      <div className="page-section-bar">
+        <input className="field-input" placeholder={t("Search name / contact / email...")}
+               value={search} onChange={e => setSearch(e.target.value)}
+               style={{ width: 240 }} />
+        <div style={{ flex: 1 }} />
+        <span style={{ color: "var(--shell-text-3)", fontSize: 12 }}>
+          {customers.length} {t("customers")} · {stages.length} {t("stages")}
+        </span>
+        {!isCustomer(user) && (
+          <button className="btn primary" onClick={() => setShowNew(true)}>{t("+ New Customer")}</button>
+        )}
       </div>
-      {loading ? <Spinner /> : view === "list"
-        ? <CustomerList customers={filtered} stages={stages} onOpen={setSelectedId} />
-        : <CustomerKanban customers={filtered} stages={stages} onOpen={setSelectedId} onMoved={reload} />}
+
+      {loading ? (
+        <div className="empty-state empty-text">{t("Loading...")}</div>
+      ) : view === "list" ? (
+        <CustomerList customers={filtered} stages={stages} onOpen={setSelectedId} />
+      ) : (
+        <CustomerKanban customers={filtered} stages={stages} onOpen={setSelectedId} onMoved={reload} />
+      )}
+
       {showNew && <NewCustomerModal stages={stages} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); reload(); }} />}
-    </div>
+    </>
   );
 }
 
-// =========================================================================
-// List view
-// =========================================================================
+// ============================================================
+// 列表视图
+// ============================================================
 function CustomerList({ customers, stages, onOpen }) {
   const stageById = Object.fromEntries(stages.map(s => [s.id, s]));
-  if (customers.length === 0) return <EmptyState>No customers yet.</EmptyState>;
+  if (customers.length === 0) {
+    return <div className="page-card empty-state empty-text">{t("No customers yet")}</div>;
+  }
   return (
-    <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-        <thead><tr style={{ background: "#f8fafc" }}>
-          {["Name", "Stage", "Contact", "Email", "Phone", "Country", "Tags"].map(h => (
-            <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
-          ))}
-        </tr></thead>
+    <div className="page-card" style={{ padding: 0 }}>
+      <table className="tms-table">
+        <thead>
+          <tr>
+            <th>{t("Name")}</th>
+            <th>{t("Stage")}</th>
+            <th>{t("Contact")}</th>
+            <th>{t("Email")}</th>
+            <th>{t("Phone")}</th>
+            <th>{t("Country")}</th>
+            <th>{t("Tags")}</th>
+          </tr>
+        </thead>
         <tbody>
-          {customers.map((c, i) => {
+          {customers.map(c => {
             const stage = stageById[c.pipeline_stage_id];
             return (
-              <tr key={c.id} onClick={() => onOpen(c.id)} style={{ cursor: "pointer", borderBottom: i < customers.length - 1 ? "1px solid #f1f5f9" : "none" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <td style={{ padding: "10px 12px", fontWeight: 600, color: "#0f172a" }}>{c.name}</td>
-                <td style={{ padding: "10px 12px" }}>{stage ? <Tag color={stage.color}>{stage.name}</Tag> : <span style={{ color: "#cbd5e1" }}>—</span>}</td>
-                <td style={{ padding: "10px 12px" }}>{c.contact_name || "—"}</td>
-                <td style={{ padding: "10px 12px", color: "#475569" }}>{c.contact_email || "—"}</td>
-                <td style={{ padding: "10px 12px", color: "#475569" }}>{c.contact_phone || "—"}</td>
-                <td style={{ padding: "10px 12px", color: "#475569" }}>{c.country || "—"}</td>
-                <td style={{ padding: "10px 12px" }}>
-                  {(c.tags || []).slice(0, 3).map(t => <span key={t} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "#f1f5f9", color: "#475569", marginRight: 4 }}>{t}</span>)}
+              <tr key={c.id} onClick={() => onOpen(c.id)} style={{ cursor: "pointer" }}>
+                <td style={{ fontWeight: 600 }}>{c.name}</td>
+                <td>{stage
+                  ? <span className="badge" style={{ background: stage.color + "20", color: stage.color }}>{t(stage.name)}</span>
+                  : <span className="muted">—</span>}</td>
+                <td>{c.contact_name || <span className="muted">—</span>}</td>
+                <td>{c.contact_email || <span className="muted">—</span>}</td>
+                <td>{c.contact_phone || <span className="muted">—</span>}</td>
+                <td>{c.country || <span className="muted">—</span>}</td>
+                <td>
+                  {(c.tags || []).slice(0, 3).map(t => (
+                    <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>
+                  ))}
                 </td>
               </tr>
             );
@@ -110,17 +128,17 @@ function CustomerList({ customers, stages, onOpen }) {
   );
 }
 
-// =========================================================================
-// Kanban / Pipeline view  (drag a card between stages)
-// =========================================================================
+// ============================================================
+// 看板视图（拖拽换阶段）
+// ============================================================
 function CustomerKanban({ customers, stages, onOpen, onMoved }) {
   const [dragId, setDragId] = useState(null);
   const [overStage, setOverStage] = useState(null);
 
   const grouped = useMemo(() => {
     const g = { __none: [] };
-    stages.forEach((s) => g[s.id] = []);
-    customers.forEach((c) => {
+    stages.forEach(s => g[s.id] = []);
+    customers.forEach(c => {
       if (c.pipeline_stage_id && g[c.pipeline_stage_id]) g[c.pipeline_stage_id].push(c);
       else g.__none.push(c);
     });
@@ -138,46 +156,58 @@ function CustomerKanban({ customers, stages, onOpen, onMoved }) {
     onMoved();
   };
 
-  const cols = [...stages, { id: "__none", name: "Unassigned", color: "#94a3b8" }];
+  const cols = [...stages, { id: "__none", name: t("Unassigned"), color: "#94a3b8" }];
 
   return (
     <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
-      {cols.map((s) => {
+      {cols.map(s => {
         const cards = grouped[s.id] || [];
         const isOver = overStage === s.id;
         return (
           <div key={s.id}
-            onDragOver={(e) => { e.preventDefault(); setOverStage(s.id); }}
-            onDragLeave={() => setOverStage(null)}
-            onDrop={() => dropTo(s.id)}
-            style={{
-              minWidth: 260, flex: "0 0 260px", background: isOver ? "#e0f2fe" : "#f8fafc",
-              borderRadius: 10, border: `2px ${isOver ? "solid #0ea5e9" : "dashed transparent"}`, padding: 10,
-            }}>
+               onDragOver={(e) => { e.preventDefault(); setOverStage(s.id); }}
+               onDragLeave={() => setOverStage(null)}
+               onDrop={() => dropTo(s.id)}
+               style={{
+                 minWidth: 260, flex: "0 0 260px",
+                 background: isOver ? "var(--shell-primary-50)" : "var(--shell-bg)",
+                 border: `2px ${isOver ? "solid var(--shell-primary)" : "dashed transparent"}`,
+                 borderRadius: 6, padding: 10,
+               }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--shell-text)", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color }} />
-                {s.name}
+                {t(s.name)}
               </span>
-              <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{cards.length}</span>
+              <span style={{ fontSize: 11, color: "var(--shell-text-3)" }}>{cards.length}</span>
             </div>
-            {cards.map((c) => (
+            {cards.map(c => (
               <div key={c.id}
-                draggable
-                onDragStart={() => setDragId(c.id)}
-                onDragEnd={() => { setDragId(null); setOverStage(null); }}
-                onClick={() => onOpen(c.id)}
-                style={{
-                  background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: 10, marginBottom: 8,
-                  cursor: dragId === c.id ? "grabbing" : "grab", opacity: dragId === c.id ? 0.5 : 1,
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-                }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a", marginBottom: 3 }}>{c.name}</div>
-                {c.contact_name && <div style={{ fontSize: 11, color: "#64748b" }}>{c.contact_name}</div>}
-                {c.country && <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 4 }}>📍 {c.country}</div>}
+                   draggable
+                   onDragStart={() => setDragId(c.id)}
+                   onDragEnd={() => { setDragId(null); setOverStage(null); }}
+                   onClick={() => onOpen(c.id)}
+                   style={{
+                     background: "#fff", border: "1px solid var(--shell-border)",
+                     borderRadius: 4, padding: 10, marginBottom: 6,
+                     cursor: dragId === c.id ? "grabbing" : "grab",
+                     opacity: dragId === c.id ? 0.5 : 1,
+                     boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                   }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--shell-text)", marginBottom: 2 }}>{c.name}</div>
+                {c.contact_name && (
+                  <div style={{ fontSize: 11, color: "var(--shell-text-2)" }}>{c.contact_name}</div>
+                )}
+                {c.country && (
+                  <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginTop: 4 }}>📍 {c.country}</div>
+                )}
               </div>
             ))}
-            {cards.length === 0 && <div style={{ fontSize: 11, color: "#cbd5e1", textAlign: "center", padding: "20px 0" }}>Drop here</div>}
+            {cards.length === 0 && (
+              <div style={{ fontSize: 11, color: "var(--shell-text-3)", textAlign: "center", padding: "20px 0" }}>
+                {t("Drop here")}
+              </div>
+            )}
           </div>
         );
       })}
@@ -185,15 +215,19 @@ function CustomerKanban({ customers, stages, onOpen, onMoved }) {
   );
 }
 
-// =========================================================================
-// New Customer Modal
-// =========================================================================
+// ============================================================
+// 新建客户
+// ============================================================
 function NewCustomerModal({ stages, onClose, onSaved }) {
-  const [form, setForm] = useState({ name: "", contact_name: "", contact_email: "", contact_phone: "", country: "", source: "", pipeline_stage_id: stages[0]?.id || "" });
+  const [form, setForm] = useState({
+    name: "", contact_name: "", contact_email: "", contact_phone: "",
+    country: "", source: "", pipeline_stage_id: stages[0]?.id || "",
+  });
   const [saving, setSaving] = useState(false);
+  const ch = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
   const save = async () => {
-    if (!form.name.trim()) { alert("Name required"); return; }
+    if (!form.name.trim()) { alert("名称必填"); return; }
     setSaving(true);
     const payload = { ...form, pipeline_stage_id: form.pipeline_stage_id || null };
     const { error } = await supabase.from("customers").insert(payload);
@@ -203,35 +237,55 @@ function NewCustomerModal({ stages, onClose, onSaved }) {
   };
 
   return (
-    <Modal onClose={onClose} title="New Customer" width={520}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Input label="Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-        <Select label="Pipeline Stage" value={form.pipeline_stage_id} onChange={e => setForm(p => ({ ...p, pipeline_stage_id: e.target.value }))}
-          options={[{ value: "", label: "(none)" }, ...stages.map(s => ({ value: s.id, label: s.name }))]} />
-        <Input label="Contact Name" value={form.contact_name} onChange={e => setForm(p => ({ ...p, contact_name: e.target.value }))} />
-        <Input label="Email" type="email" value={form.contact_email} onChange={e => setForm(p => ({ ...p, contact_email: e.target.value }))} />
-        <Input label="Phone" value={form.contact_phone} onChange={e => setForm(p => ({ ...p, contact_phone: e.target.value }))} />
-        <Input label="Country" value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} />
-        <Input label="Source" value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="referral / web / show..." />
-      </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Create"}</Button>
+    <Modal title="新建客户" onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose} disabled={saving}>取消</button>
+        <button className="btn primary" onClick={save} disabled={saving}>
+          {saving ? "保存中..." : "创建"}
+        </button>
+      </>
+    }>
+      <div className="field-row">
+        <Field label="名称" req>
+          <input className="field-input" value={form.name} onChange={ch("name")} />
+        </Field>
+        <Field label="阶段">
+          <select className="field-select" value={form.pipeline_stage_id} onChange={ch("pipeline_stage_id")}>
+            <option value="">（无）</option>
+            {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="联系人">
+          <input className="field-input" value={form.contact_name} onChange={ch("contact_name")} />
+        </Field>
+        <Field label="邮箱">
+          <input className="field-input" type="email" value={form.contact_email} onChange={ch("contact_email")} />
+        </Field>
+        <Field label="电话">
+          <input className="field-input" value={form.contact_phone} onChange={ch("contact_phone")} />
+        </Field>
+        <Field label="国家">
+          <input className="field-input" value={form.country} onChange={ch("country")} />
+        </Field>
+        <Field label="来源">
+          <input className="field-input" value={form.source} onChange={ch("source")}
+                 placeholder="referral / web / show..." />
+        </Field>
       </div>
     </Modal>
   );
 }
 
-// =========================================================================
-// Customer Detail
-// =========================================================================
+// ============================================================
+// 客户详情（4 个 tab）
+// ============================================================
 function CustomerDetail({ customer, stages, user, onBack, onSaved }) {
   const [tab, setTab] = useState("overview");
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState(customer);
-
   const stage = stages.find(s => s.id === form.pipeline_stage_id);
   const canEdit = !isCustomer(user);
+  const ch = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
   const save = async () => {
     const payload = {
@@ -245,93 +299,109 @@ function CustomerDetail({ customer, stages, user, onBack, onSaved }) {
   };
 
   return (
-    <div>
-      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 0", border: "none", background: "none", color: "#0ea5e9", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>← Back to customers</button>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
+    <>
+      <button className="btn" onClick={onBack} style={{ marginBottom: 12 }}>{t("Back to list")}</button>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{form.name}</h1>
+          <h1 className="page-title" style={{ margin: 0 }}>{form.name}</h1>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-            {stage && <Tag color={stage.color}>{stage.name}</Tag>}
-            {form.country && <span style={{ fontSize: 12, color: "#64748b" }}>📍 {form.country}</span>}
+            {stage && (
+              <span className="badge" style={{ background: stage.color + "20", color: stage.color }}>{t(stage.name)}</span>
+            )}
+            {form.country && (
+              <span style={{ fontSize: 12, color: "var(--shell-text-2)" }}>📍 {form.country}</span>
+            )}
           </div>
         </div>
         {canEdit && (edit
-          ? <div style={{ display: "flex", gap: 8 }}><Button variant="secondary" onClick={() => { setEdit(false); setForm(customer); }}>Cancel</Button><Button onClick={save}>Save</Button></div>
-          : <Button variant="secondary" onClick={() => setEdit(true)}>Edit</Button>)}
+          ? <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn" onClick={() => { setEdit(false); setForm(customer); }}>{t("Cancel")}</button>
+              <button className="btn primary" onClick={save}>{t("Save")}</button>
+            </div>
+          : <button className="btn" onClick={() => setEdit(true)}>{t("Edit")}</button>
+        )}
       </div>
 
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #e2e8f0", marginBottom: 16 }}>
-        {[{ k: "overview", l: "Overview" }, { k: "followups", l: "Follow-ups" }, { k: "quotes", l: "Quotes" }, { k: "notes", l: "Notes" }].map((t) => (
-          <button key={t.k} onClick={() => setTab(t.k)} style={{
-            padding: "9px 16px", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-            color: tab === t.k ? "#0ea5e9" : "#64748b", borderBottom: tab === t.k ? "2px solid #0ea5e9" : "2px solid transparent",
-            marginBottom: -1,
-          }}>{t.l}</button>
-        ))}
-      </div>
+      <Tabs value={tab} onChange={setTab} options={[
+        { k: "overview",  l: t("Overview") },
+        { k: "followups", l: t("Follow-ups") },
+        { k: "quotes",    l: t("Quotes") },
+        { k: "notes",     l: t("Notes") },
+      ]} />
 
       {tab === "overview" && (
-        <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "1px solid #e2e8f0" }}>
-          <SectionHeader icon="👤" title="Customer Info" accent="#0ea5e9" />
+        <div className="page-card">
+          <div className="card-title">{t("Customer Info")}</div>
           {edit ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Input label="Name" value={form.name || ""} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-              <Select label="Pipeline Stage" value={form.pipeline_stage_id || ""} onChange={e => setForm(p => ({ ...p, pipeline_stage_id: e.target.value }))}
-                options={[{ value: "", label: "(none)" }, ...stages.map(s => ({ value: s.id, label: s.name }))]} />
-              <Input label="Contact Name" value={form.contact_name || ""} onChange={e => setForm(p => ({ ...p, contact_name: e.target.value }))} />
-              <Input label="Email" value={form.contact_email || ""} onChange={e => setForm(p => ({ ...p, contact_email: e.target.value }))} />
-              <Input label="Phone" value={form.contact_phone || ""} onChange={e => setForm(p => ({ ...p, contact_phone: e.target.value }))} />
-              <Input label="Country" value={form.country || ""} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} />
-              <Input label="Website" value={form.website || ""} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} />
-              <Input label="Source" value={form.source || ""} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} />
+            <div className="field-row">
+              <Field label="名称"><input className="field-input" value={form.name || ""} onChange={ch("name")} /></Field>
+              <Field label="阶段">
+                <select className="field-select" value={form.pipeline_stage_id || ""} onChange={ch("pipeline_stage_id")}>
+                  <option value="">（无）</option>
+                  {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="联系人"><input className="field-input" value={form.contact_name || ""} onChange={ch("contact_name")} /></Field>
+              <Field label="邮箱"><input className="field-input" value={form.contact_email || ""} onChange={ch("contact_email")} /></Field>
+              <Field label="电话"><input className="field-input" value={form.contact_phone || ""} onChange={ch("contact_phone")} /></Field>
+              <Field label="国家"><input className="field-input" value={form.country || ""} onChange={ch("country")} /></Field>
+              <Field label="网站"><input className="field-input" value={form.website || ""} onChange={ch("website")} /></Field>
+              <Field label="来源"><input className="field-input" value={form.source || ""} onChange={ch("source")} /></Field>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-              <InfoLine label="Contact Name" value={customer.contact_name} />
-              <InfoLine label="Email" value={customer.contact_email} />
-              <InfoLine label="Phone" value={customer.contact_phone} />
-              <InfoLine label="Country" value={customer.country} />
-              <InfoLine label="Website" value={customer.website} />
-              <InfoLine label="Source" value={customer.source} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+              <InfoLine label="联系人" value={customer.contact_name} />
+              <InfoLine label="邮箱"   value={customer.contact_email} />
+              <InfoLine label="电话"   value={customer.contact_phone} />
+              <InfoLine label="国家"   value={customer.country} />
+              <InfoLine label="网站"   value={customer.website} />
+              <InfoLine label="来源"   value={customer.source} />
             </div>
           )}
         </div>
       )}
+
       {tab === "followups" && <FollowupsTab customer={customer} user={user} />}
       {tab === "quotes"    && <QuotesTab customer={customer} user={user} canEdit={canEdit} />}
-      {tab === "notes"     && <NotesPanel entityType="customer" entityId={customer.id} user={user} />}
-    </div>
+      {tab === "notes"     && (
+        <div className="page-card">
+          <NotesPanel entityType="customer" entityId={customer.id} user={user} />
+        </div>
+      )}
+    </>
   );
 }
 
 const InfoLine = ({ label, value }) => (
   <div>
-    <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-    <div style={{ fontSize: 13, fontWeight: 500, color: value ? "#1e293b" : "#cbd5e1" }}>{value || "—"}</div>
+    <div style={{ fontSize: 11, fontWeight: 500, color: "var(--shell-text-3)", marginBottom: 3 }}>{label}</div>
+    <div style={{ fontSize: 13, color: value ? "var(--shell-text)" : "var(--shell-text-3)" }}>{value || "—"}</div>
   </div>
 );
 
-// =========================================================================
-// Follow-ups Tab
-// =========================================================================
+// ============================================================
+// 跟进记录 tab
+// ============================================================
 function FollowupsTab({ customer, user }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ type: "note", subject: "", body: "", next_action: "", next_date: "" });
+  const ch = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("customer_followups").select("*").eq("customer_id", customer.id).order("created_at", { ascending: false });
+    const { data } = await supabase.from("customer_followups")
+      .select("*").eq("customer_id", customer.id).order("created_at", { ascending: false });
     setItems(data || []); setLoading(false);
   }, [customer.id]);
   useEffect(() => { load(); }, [load]);
 
   const add = async () => {
-    if (!form.body && !form.subject) { alert("Subject or body required"); return; }
+    if (!form.body && !form.subject) { alert("主题或内容必填"); return; }
     const payload = {
       customer_id: customer.id, user_id: user.id, user_email: user.email,
       type: form.type, subject: form.subject || null, body: form.body || null,
-      next_action: form.next_action || null,
-      next_date: form.next_date || null,
+      next_action: form.next_action || null, next_date: form.next_date || null,
     };
     const { error } = await supabase.from("customer_followups").insert(payload);
     if (error) { alert(error.message); return; }
@@ -339,60 +409,103 @@ function FollowupsTab({ customer, user }) {
     load();
   };
 
-  const remove = async (id) => { if (!confirm("Delete?")) return; await supabase.from("customer_followups").delete().eq("id", id); load(); };
+  const remove = async (id) => {
+    if (!confirm("删除这条跟进？")) return;
+    await supabase.from("customer_followups").delete().eq("id", id);
+    load();
+  };
 
   return (
-    <div>
-      <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-        <SectionHeader icon="📞" title="Add Follow-up" accent="#10b981" />
-        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <Select label="Type" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={["note", "call", "email", "meeting"]} />
-          <Input label="Subject" value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} />
-          <Input label="Next date" type="date" value={form.next_date} onChange={e => setForm(p => ({ ...p, next_date: e.target.value }))} />
+    <>
+      <div className="page-card">
+        <div className="card-title">新建跟进</div>
+        <div className="field-row">
+          <Field label="类型">
+            <select className="field-select" value={form.type} onChange={ch("type")}>
+              <option value="note">笔记</option>
+              <option value="call">电话</option>
+              <option value="email">邮件</option>
+              <option value="meeting">会面</option>
+            </select>
+          </Field>
+          <Field label="主题">
+            <input className="field-input" value={form.subject} onChange={ch("subject")} />
+          </Field>
+          <Field label="下次日期">
+            <input className="field-input" type="date" value={form.next_date} onChange={ch("next_date")} />
+          </Field>
         </div>
-        <textarea rows={3} placeholder="Details..." value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))}
-          style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12.5, outline: "none", boxSizing: "border-box", marginBottom: 10, fontFamily: "inherit", resize: "vertical" }} />
-        <Input label="Next Action" value={form.next_action} onChange={e => setForm(p => ({ ...p, next_action: e.target.value }))} placeholder="e.g. Send pricing for FCL Shanghai → LA" />
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}><Button onClick={add}>+ Add</Button></div>
+        <Field label="详情">
+          <textarea className="field-textarea" value={form.body} onChange={ch("body")} />
+        </Field>
+        <Field label="下次行动">
+          <input className="field-input" value={form.next_action} onChange={ch("next_action")}
+                 placeholder="例如：发上海→洛杉矶 FCL 报价" />
+        </Field>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button className="btn primary" onClick={add}>+ 添加</button>
+        </div>
       </div>
 
-      {loading ? <Spinner /> : items.length === 0 ? <EmptyState>No follow-ups yet.</EmptyState> :
+      {loading ? (
+        <div className="empty-state empty-text">加载中...</div>
+      ) : items.length === 0 ? (
+        <div className="page-card empty-state empty-text">暂无跟进</div>
+      ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {items.map((it) => (
-            <div key={it.id} style={{ background: "#fff", borderRadius: 10, padding: 14, border: "1px solid #e2e8f0" }}>
+          {items.map(it => (
+            <div key={it.id} className="page-card" style={{ padding: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Tag color={typeColor(it.type)}>{it.type}</Tag>
+                  <span className="badge" style={{ background: typeColor(it.type) + "20", color: typeColor(it.type) }}>
+                    {typeLabel(it.type)}
+                  </span>
                   {it.subject && <span style={{ fontSize: 13, fontWeight: 600 }}>{it.subject}</span>}
                 </div>
-                <button onClick={() => remove(it.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Del</button>
+                <button onClick={() => remove(it.id)}
+                        style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                  删除
+                </button>
               </div>
-              {it.body && <div style={{ fontSize: 12.5, color: "#475569", whiteSpace: "pre-wrap", marginBottom: 6 }}>{it.body}</div>}
+              {it.body && (
+                <div style={{ fontSize: 13, color: "var(--shell-text)", whiteSpace: "pre-wrap", marginBottom: 6 }}>
+                  {it.body}
+                </div>
+              )}
               {(it.next_action || it.next_date) && (
-                <div style={{ fontSize: 11.5, color: "#0ea5e9", padding: "5px 8px", background: "#f0f9ff", borderRadius: 5, display: "inline-block", marginBottom: 6 }}>
+                <div style={{
+                  fontSize: 12, color: "var(--shell-primary)", padding: "5px 8px",
+                  background: "var(--shell-primary-50)", borderRadius: 4,
+                  display: "inline-block", marginBottom: 6,
+                }}>
                   ⏭ {it.next_action || ""}{it.next_date ? ` · ${it.next_date}` : ""}
                 </div>
               )}
-              <div style={{ fontSize: 10.5, color: "#94a3b8", fontFamily: "'DM Mono',monospace" }}>{it.user_email} · {new Date(it.created_at).toLocaleString()}</div>
+              <div style={{ fontSize: 11, color: "var(--shell-text-3)" }}>
+                {it.user_email} · {new Date(it.created_at).toLocaleString()}
+              </div>
             </div>
           ))}
-        </div>}
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 
-const typeColor = (t) => ({ note: "#64748b", call: "#10b981", email: "#0ea5e9", meeting: "#8b5cf6" }[t] || "#64748b");
+const typeColor = (t) => ({ note: "#64748b", call: "#10b981", email: "#1989ff", meeting: "#8b5cf6" }[t] || "#64748b");
+const typeLabel = (t) => ({ note: "笔记", call: "电话", email: "邮件", meeting: "会面" }[t] || t);
 
-// =========================================================================
-// Quotes Tab
-// =========================================================================
+// ============================================================
+// 报价 tab
+// ============================================================
 function QuotesTab({ customer, user, canEdit }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("quotes").select("*").eq("customer_id", customer.id).order("created_at", { ascending: false });
+    const { data } = await supabase.from("quotes")
+      .select("*").eq("customer_id", customer.id).order("created_at", { ascending: false });
     setItems(data || []); setLoading(false);
   }, [customer.id]);
   useEffect(() => { load(); }, [load]);
@@ -407,49 +520,78 @@ function QuotesTab({ customer, user, canEdit }) {
     setEditingId(data?.[0]?.id);
   };
 
-  const remove = async (id) => { if (!confirm("Delete quote?")) return; await supabase.from("quotes").delete().eq("id", id); load(); };
+  const remove = async (id) => {
+    if (!confirm("删除这条报价？")) return;
+    await supabase.from("quotes").delete().eq("id", id);
+    load();
+  };
 
   if (editingId) {
     return <QuoteEditor quoteId={editingId} customer={customer} user={user} onClose={() => { setEditingId(null); load(); }} />;
   }
 
   return (
-    <div>
-      {canEdit && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><Button onClick={newQuote}>+ New Quote</Button></div>}
-      {loading ? <Spinner /> : items.length === 0 ? <EmptyState>No quotes yet.</EmptyState> :
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-            <thead><tr style={{ background: "#f8fafc" }}>
-              {["Quote#", "Status", "POL → POD", "Carrier", "Total", "Valid Until", "Created", ""].map((h) => <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}
-            </tr></thead>
+    <>
+      {canEdit && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <button className="btn primary" onClick={newQuote}>+ 新建报价</button>
+        </div>
+      )}
+      {loading ? (
+        <div className="empty-state empty-text">加载中...</div>
+      ) : items.length === 0 ? (
+        <div className="page-card empty-state empty-text">暂无报价</div>
+      ) : (
+        <div className="page-card" style={{ padding: 0 }}>
+          <table className="tms-table">
+            <thead>
+              <tr>
+                <th>报价号</th>
+                <th>状态</th>
+                <th>POL → POD</th>
+                <th>船公司</th>
+                <th>金额</th>
+                <th>有效期</th>
+                <th>创建时间</th>
+                <th />
+              </tr>
+            </thead>
             <tbody>
-              {items.map((q, i) => (
-                <tr key={q.id} style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none", cursor: "pointer" }}
-                  onClick={() => setEditingId(q.id)}
-                  onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <td style={{ padding: "10px 12px", fontFamily: "'DM Mono',monospace", fontWeight: 600, color: "#0ea5e9" }}>{q.quote_no || "—"}</td>
-                  <td style={{ padding: "10px 12px" }}><Badge value={q.status} small /></td>
-                  <td style={{ padding: "10px 12px" }}>{q.pol && q.pod ? `${q.pol} → ${q.pod}` : "—"}</td>
-                  <td style={{ padding: "10px 12px" }}>{q.carrier || "—"}</td>
-                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>{q.total ? `${q.currency} ${Number(q.total).toLocaleString()}` : "—"}</td>
-                  <td style={{ padding: "10px 12px", fontFamily: "'DM Mono',monospace", fontSize: 11.5 }}>{q.valid_until || "—"}</td>
-                  <td style={{ padding: "10px 12px", fontSize: 11.5, color: "#94a3b8" }}>{new Date(q.created_at).toLocaleDateString()}</td>
-                  <td style={{ padding: "10px 12px" }} onClick={e => e.stopPropagation()}>
-                    {canEdit && <button onClick={() => remove(q.id)} style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Del</button>}
+              {items.map(q => (
+                <tr key={q.id} style={{ cursor: "pointer" }} onClick={() => setEditingId(q.id)}>
+                  <td style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--shell-primary)" }}>{q.quote_no || "—"}</td>
+                  <td><span className={"badge " + statusBadgeClass(q.status)}>{statusLabel(q.status)}</span></td>
+                  <td>{q.pol && q.pod ? `${q.pol} → ${q.pod}` : "—"}</td>
+                  <td>{q.carrier || "—"}</td>
+                  <td style={{ fontWeight: 600 }}>{q.total ? `${q.currency} ${Number(q.total).toLocaleString()}` : "—"}</td>
+                  <td>{q.valid_until || "—"}</td>
+                  <td className="muted">{new Date(q.created_at).toLocaleDateString()}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {canEdit && (
+                      <button onClick={() => remove(q.id)}
+                              style={{ border: "none", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                        删除
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>}
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 
-// =========================================================================
-// Quote Editor (line items + totals)
-// =========================================================================
+const statusLabel = (s) => ({ draft: "草稿", sent: "已发送", accepted: "已接受", rejected: "已拒绝", expired: "已过期" }[s] || s);
+const statusBadgeClass = (s) => ({
+  draft: "", sent: "info", accepted: "approved", rejected: "rejected", expired: "pending",
+}[s] || "");
+
+// ============================================================
+// 报价编辑器（行项目 + 合计）
+// ============================================================
 function QuoteEditor({ quoteId, customer, user, onClose }) {
   const [quote, setQuote] = useState(null);
   const [items, setItems] = useState([]);
@@ -465,9 +607,11 @@ function QuoteEditor({ quoteId, customer, user, onClose }) {
   }, [quoteId]);
   useEffect(() => { load(); }, [load]);
 
-  const total = useMemo(() => items.reduce((s, it) => s + (Number(it.qty || 0) * Number(it.unit_price || 0)), 0), [items]);
+  const total = useMemo(() =>
+    items.reduce((s, it) => s + (Number(it.qty || 0) * Number(it.unit_price || 0)), 0),
+  [items]);
 
-  const update = (field, value) => setQuote((p) => ({ ...p, [field]: value }));
+  const update = (field, value) => setQuote(p => ({ ...p, [field]: value }));
 
   const saveAll = async () => {
     setSaving(true);
@@ -476,7 +620,6 @@ function QuoteEditor({ quoteId, customer, user, onClose }) {
       incoterms: quote.incoterms, carrier: quote.carrier, currency: quote.currency,
       valid_until: quote.valid_until || null, notes: quote.notes, total: Number(total.toFixed(2)),
     }).eq("id", quoteId);
-    // Items: delete-and-reinsert (simple, OK for small lists)
     await supabase.from("quote_items").delete().eq("quote_id", quoteId);
     if (items.length > 0) {
       const payload = items.map((it, i) => ({
@@ -488,65 +631,180 @@ function QuoteEditor({ quoteId, customer, user, onClose }) {
     setSaving(false); onClose();
   };
 
-  const addRow = () => setItems((p) => [...p, { id: `tmp-${Date.now()}-${Math.random()}`, description: "", qty: 1, unit: "", unit_price: 0 }]);
-  const updateRow = (idx, field, value) => setItems((p) => p.map((it, i) => i === idx ? { ...it, [field]: value } : it));
-  const removeRow = (idx) => setItems((p) => p.filter((_, i) => i !== idx));
+  const addRow = () => setItems(p => [...p, { id: `tmp-${Date.now()}-${Math.random()}`, description: "", qty: 1, unit: "", unit_price: 0 }]);
+  const updateRow = (idx, field, value) => setItems(p => p.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  const removeRow = (idx) => setItems(p => p.filter((_, i) => i !== idx));
 
-  if (loading) return <Spinner />;
-  if (!quote) return <EmptyState>Quote not found.</EmptyState>;
+  if (loading) return <div className="empty-state empty-text">加载中...</div>;
+  if (!quote)  return <div className="page-card empty-state empty-text">报价不存在</div>;
 
   return (
-    <div>
-      <button onClick={onClose} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 0", border: "none", background: "none", color: "#0ea5e9", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>← Back to quotes</button>
-      <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-        <SectionHeader icon="💰" title={`Quote ${quote.quote_no || ""} — ${customer.name}`} accent="#f59e0b"
-          right={<div style={{ display: "flex", gap: 8 }}><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={saveAll} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></div>} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-          <Input label="Quote No" value={quote.quote_no || ""} onChange={e => update("quote_no", e.target.value)} />
-          <Select label="Status" value={quote.status || "draft"} onChange={e => update("status", e.target.value)} options={["draft", "sent", "accepted", "rejected", "expired"]} />
-          <Input label="POL" value={quote.pol || ""} onChange={e => update("pol", e.target.value)} />
-          <Input label="POD" value={quote.pod || ""} onChange={e => update("pod", e.target.value)} />
-          <Select label="Incoterms" value={quote.incoterms || ""} onChange={e => update("incoterms", e.target.value)} options={["", "FOB", "DDP", "CIF", "EXW", "DAP"]} />
-          <Input label="Carrier" value={quote.carrier || ""} onChange={e => update("carrier", e.target.value)} />
-          <Input label="Currency" value={quote.currency || "USD"} onChange={e => update("currency", e.target.value)} />
-          <Input label="Valid Until" type="date" value={quote.valid_until || ""} onChange={e => update("valid_until", e.target.value)} />
+    <>
+      <button className="btn" onClick={onClose} style={{ marginBottom: 12 }}>← 返回报价列表</button>
+
+      <div className="page-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div className="card-title" style={{ marginBottom: 0, paddingBottom: 0, border: "none" }}>
+            报价 {quote.quote_no || ""} — {customer.name}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="btn" onClick={onClose}>取消</button>
+            <button className="btn primary" onClick={saveAll} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </button>
+          </div>
         </div>
-        <div style={{ marginTop: 10 }}>
-          <label style={{ fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3, display: "block" }}>Notes</label>
-          <textarea rows={2} value={quote.notes || ""} onChange={e => update("notes", e.target.value)}
-            style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} />
+        <div className="field-row">
+          <Field label="报价号"><input className="field-input" value={quote.quote_no || ""} onChange={e => update("quote_no", e.target.value)} /></Field>
+          <Field label="状态">
+            <select className="field-select" value={quote.status || "draft"} onChange={e => update("status", e.target.value)}>
+              <option value="draft">草稿</option>
+              <option value="sent">已发送</option>
+              <option value="accepted">已接受</option>
+              <option value="rejected">已拒绝</option>
+              <option value="expired">已过期</option>
+            </select>
+          </Field>
+          <Field label="POL"><input className="field-input" value={quote.pol || ""} onChange={e => update("pol", e.target.value)} /></Field>
+          <Field label="POD"><input className="field-input" value={quote.pod || ""} onChange={e => update("pod", e.target.value)} /></Field>
+          <Field label="贸易条款">
+            <select className="field-select" value={quote.incoterms || ""} onChange={e => update("incoterms", e.target.value)}>
+              <option value=""></option>
+              <option>FOB</option><option>DDP</option><option>CIF</option><option>EXW</option><option>DAP</option>
+            </select>
+          </Field>
+          <Field label="船公司"><input className="field-input" value={quote.carrier || ""} onChange={e => update("carrier", e.target.value)} /></Field>
+          <Field label="币种"><input className="field-input" value={quote.currency || "USD"} onChange={e => update("currency", e.target.value)} /></Field>
+          <Field label="有效期"><input className="field-input" type="date" value={quote.valid_until || ""} onChange={e => update("valid_until", e.target.value)} /></Field>
         </div>
+        <Field label="备注">
+          <textarea className="field-textarea" rows={2} value={quote.notes || ""} onChange={e => update("notes", e.target.value)} />
+        </Field>
       </div>
-      <div style={{ background: "#fff", borderRadius: 10, padding: 18, border: "1px solid #e2e8f0" }}>
-        <SectionHeader icon="📋" title="Line Items" accent="#0ea5e9" right={<Button small onClick={addRow}>+ Add line</Button>} />
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-          <thead><tr style={{ background: "#f8fafc" }}>
-            {["Description", "Qty", "Unit", "Unit Price", "Amount", ""].map((h) => <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}
-          </tr></thead>
+
+      <div className="page-card" style={{ padding: 0 }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "12px 16px", borderBottom: "1px solid var(--shell-border-2)",
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>明细</div>
+          <button className="btn primary" onClick={addRow}>+ 添加行</button>
+        </div>
+        <table className="tms-table">
+          <thead>
+            <tr>
+              <th>描述</th>
+              <th style={{ width: 80 }}>数量</th>
+              <th style={{ width: 80 }}>单位</th>
+              <th style={{ width: 110 }}>单价</th>
+              <th>金额</th>
+              <th style={{ width: 50 }} />
+            </tr>
+          </thead>
           <tbody>
             {items.map((it, i) => {
               const amt = (Number(it.qty || 0) * Number(it.unit_price || 0)).toFixed(2);
               return (
-                <tr key={it.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                  <td style={{ padding: "6px 10px" }}><input value={it.description || ""} onChange={e => updateRow(i, "description", e.target.value)} style={{ width: "100%", border: "none", outline: "none", fontSize: 12.5, padding: "4px 6px", background: "transparent" }} /></td>
-                  <td style={{ padding: "6px 10px", width: 70 }}><input type="number" value={it.qty || ""} onChange={e => updateRow(i, "qty", e.target.value)} style={{ width: 60, border: "none", outline: "none", fontSize: 12.5, padding: "4px 6px", background: "transparent" }} /></td>
-                  <td style={{ padding: "6px 10px", width: 70 }}><input value={it.unit || ""} onChange={e => updateRow(i, "unit", e.target.value)} style={{ width: 60, border: "none", outline: "none", fontSize: 12.5, padding: "4px 6px", background: "transparent" }} placeholder="cbm/kg" /></td>
-                  <td style={{ padding: "6px 10px", width: 100 }}><input type="number" value={it.unit_price || ""} onChange={e => updateRow(i, "unit_price", e.target.value)} style={{ width: 90, border: "none", outline: "none", fontSize: 12.5, padding: "4px 6px", background: "transparent" }} /></td>
-                  <td style={{ padding: "6px 10px", fontWeight: 600 }}>{amt}</td>
-                  <td style={{ padding: "6px 10px", width: 50 }}><button onClick={() => removeRow(i)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Del</button></td>
+                <tr key={it.id}>
+                  <td><input value={it.description || ""} onChange={e => updateRow(i, "description", e.target.value)}
+                             style={{ width: "100%", border: "none", outline: "none", fontSize: 13, padding: "4px 6px", background: "transparent" }} /></td>
+                  <td><input type="number" value={it.qty || ""} onChange={e => updateRow(i, "qty", e.target.value)}
+                             style={{ width: 60, border: "none", outline: "none", fontSize: 13, padding: "4px 6px", background: "transparent" }} /></td>
+                  <td><input value={it.unit || ""} onChange={e => updateRow(i, "unit", e.target.value)}
+                             style={{ width: 60, border: "none", outline: "none", fontSize: 13, padding: "4px 6px", background: "transparent" }}
+                             placeholder="cbm/kg" /></td>
+                  <td><input type="number" value={it.unit_price || ""} onChange={e => updateRow(i, "unit_price", e.target.value)}
+                             style={{ width: 90, border: "none", outline: "none", fontSize: 13, padding: "4px 6px", background: "transparent" }} /></td>
+                  <td style={{ fontWeight: 600 }}>{amt}</td>
+                  <td>
+                    <button onClick={() => removeRow(i)}
+                            style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                      删除
+                    </button>
+                  </td>
                 </tr>
               );
             })}
-            {items.length === 0 && <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#94a3b8", fontSize: 12 }}>No line items. Click "+ Add line".</td></tr>}
+            {items.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "var(--shell-text-3)", fontSize: 12 }}>
+                无明细。点击"+ 添加行"。
+              </td></tr>
+            )}
           </tbody>
           <tfoot>
-            <tr style={{ background: "#f0f9ff" }}>
-              <td colSpan={4} style={{ padding: "10px", textAlign: "right", fontWeight: 700 }}>Total ({quote.currency || "USD"})</td>
-              <td style={{ padding: "10px", fontWeight: 700, fontSize: 14, color: "#0369a1", fontFamily: "'DM Mono',monospace" }}>{total.toFixed(2)}</td>
+            <tr style={{ background: "var(--shell-primary-50)" }}>
+              <td colSpan={4} style={{ padding: 10, textAlign: "right", fontWeight: 600 }}>合计 ({quote.currency || "USD"})</td>
+              <td style={{ padding: 10, fontWeight: 700, fontSize: 14, color: "var(--shell-primary)", fontFamily: "monospace" }}>
+                {total.toFixed(2)}
+              </td>
               <td />
             </tr>
           </tfoot>
         </table>
+      </div>
+    </>
+  );
+}
+
+// ============================================================
+// 公用：底部 underline tabs
+// ============================================================
+function Tabs({ value, onChange, options }) {
+  return (
+    <div style={{
+      display: "flex", gap: 0, marginBottom: 12,
+      borderBottom: "1px solid var(--shell-border)",
+    }}>
+      {options.map(o => {
+        const active = value === o.k;
+        return (
+          <button key={o.k} onClick={() => onChange(o.k)} style={{
+            padding: "8px 18px", border: "none", background: "transparent",
+            fontSize: 13, cursor: "pointer",
+            color: active ? "var(--shell-primary)" : "var(--shell-text-2)",
+            fontWeight: active ? 600 : 400,
+            borderBottom: active ? "2px solid var(--shell-primary)" : "2px solid transparent",
+            marginBottom: -1,
+          }}>
+            {o.l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Field({ label, req, children }) {
+  return (
+    <div className="field">
+      <label className="field-label">{label}{req && <span className="req">*</span>}</label>
+      {children}
+    </div>
+  );
+}
+
+// ============================================================
+// 公用：Modal
+// ============================================================
+function Modal({ title, children, footer, onClose }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.35)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 560, maxWidth: "90vw", maxHeight: "85vh", overflow: "auto",
+        background: "#fff", borderRadius: 6, boxShadow: "0 10px 30px rgba(0,0,0,.2)",
+      }}>
+        <div style={{
+          padding: "12px 16px", borderBottom: "1px solid var(--shell-border)",
+          fontSize: 14, fontWeight: 600,
+        }}>{title}</div>
+        <div style={{ padding: 16 }}>{children}</div>
+        <div style={{
+          padding: "10px 16px", borderTop: "1px solid var(--shell-border)",
+          display: "flex", justifyContent: "flex-end", gap: 8,
+        }}>{footer}</div>
       </div>
     </div>
   );

@@ -1,10 +1,12 @@
+// 柜子管理 — list / detail / 装柜明细
+// 重构：用 shell.css 类替换 inline 样式 + ui.jsx 旧组件
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../supabase.js";
-import { Badge, Field, SectionHeader, Modal, Button, Input, Select, Spinner, EmptyState, FilterDropdown } from "../components/ui.jsx";
-import { t, tSupplier } from "../lib/i18n.js";
-import { isAdmin, canEditField } from "../lib/permissions.js";
-import { STATUS_COLORS } from "../lib/constants.js";
+import { tSupplier, t } from "../lib/i18n.js";
 
+// ============================================================
+// ContainersPage
+// ============================================================
 export function ContainersPage({ user }) {
   const role = user.profile?.role || "operator";
   const [containers, setContainers] = useState([]);
@@ -13,15 +15,14 @@ export function ContainersPage({ user }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("");
 
   const load = useCallback(async () => {
     const [{ data: c }, { data: t }] = await Promise.all([
       supabase.from("containers").select("*").order("created_at", { ascending: false }),
       supabase.from("container_types").select("*").order("sort_order"),
     ]);
-    setContainers(c || []);
-    setTypes(t || []);
+    setContainers(c || []); setTypes(t || []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -29,10 +30,7 @@ export function ContainersPage({ user }) {
   const typeMap = useMemo(() => Object.fromEntries(types.map(t => [t.id, t.name])), [types]);
 
   const filtered = useMemo(() => containers.filter(c => {
-    if (typeFilter !== "All") {
-      const typeName = typeMap[c.type_id] || "";
-      if (typeName !== typeFilter) return false;
-    }
+    if (typeFilter && typeMap[c.type_id] !== typeFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const fields = [c.container_no, c.booking_no, c.vessel, c.carrier, c.customer, c.pol, c.pod].filter(Boolean);
@@ -42,13 +40,7 @@ export function ContainersPage({ user }) {
   }), [containers, search, typeFilter, typeMap]);
 
   const selected = containers.find(c => c.id === selectedId);
-
-  const handleCreate = async () => {
-    setShowNew(false);
-    load();
-  };
-
-  if (loading) return <Spinner />;
+  if (loading) return <div className="empty-state empty-text">加载中...</div>;
 
   if (selected) {
     return <ContainerDetail container={selected} types={types} typeMap={typeMap} role={role} user={user}
@@ -58,79 +50,103 @@ export function ContainersPage({ user }) {
   const canCreate = role === "admin" || role === "operator" || role === "sales";
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 14 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{t("Containers")}</h1>
-          <p style={{ fontSize: 12, color: "#94a3b8", margin: "3px 0 0" }}>{filtered.length} {t("条")}</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {canCreate && <Button onClick={() => setShowNew(true)}>+ {t("New Container")}</Button>}
-        </div>
+    <>
+      <h1 className="page-title">{t("Containers")}</h1>
+
+      <div className="page-section-bar">
+        <input className="field-input" placeholder={t("Search container / booking / vessel / customer...")}
+               value={search} onChange={e => setSearch(e.target.value)}
+               style={{ width: 240 }} />
+        <select className="field-select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ width: 130 }}>
+          <option value="">{t("All Types")}</option>
+          {types.map(typ => <option key={typ.id} value={typ.name}>{typ.name}</option>)}
+        </select>
+        <div style={{ flex: 1 }} />
+        <span style={{ color: "var(--shell-text-3)", fontSize: 12 }}>{filtered.length} {t("items")}</span>
+        {canCreate && <button className="btn primary" onClick={() => setShowNew(true)}>{t("+ New Container")}</button>}
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <Input placeholder={t("Search...")} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
-        <FilterDropdown label={t("Type")} value={typeFilter} options={types.map(t => t.name)} onChange={setTypeFilter} />
-      </div>
-
-      <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead><tr style={{ background: "#f8fafc" }}>
-            {[t("Container No"), t("Booking No"), t("Vessel"), t("Carrier"), t("Type"), t("Customer"), "POL → POD", "ETD", t("Notes")].map(h =>
-              <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
-            )}
-          </tr></thead>
-          <tbody>
-            {filtered.length === 0 && <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>{t("No containers found")}</td></tr>}
-            {filtered.map((c, i) => (
-              <tr key={c.id} onClick={() => setSelectedId(c.id)} style={{ cursor: "pointer", borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <td style={{ padding: "8px", fontFamily: "'DM Mono',monospace", fontWeight: 600, color: "#0369a1" }}>{c.container_no || "—"}</td>
-                <td style={{ padding: "8px", fontFamily: "'DM Mono',monospace" }}>{c.booking_no || "—"}</td>
-                <td style={{ padding: "8px" }}>{c.vessel || "—"}</td>
-                <td style={{ padding: "8px" }}>{c.carrier || "—"}</td>
-                <td style={{ padding: "8px" }}>{typeMap[c.type_id] ? <Badge value={typeMap[c.type_id]} small /> : "—"}</td>
-                <td style={{ padding: "8px" }}>{c.customer || "—"}</td>
-                <td style={{ padding: "8px" }}>{c.pol && c.pod ? `${c.pol} → ${c.pod}` : "—"}</td>
-                <td style={{ padding: "8px", fontFamily: "'DM Mono',monospace" }}>{c.etd || "—"}</td>
-                <td style={{ padding: "8px", color: "#94a3b8", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.notes || ""}</td>
+      <div className="page-card" style={{ padding: 0 }}>
+        {filtered.length === 0 ? (
+          <div className="empty-state empty-text">{t("No containers")}</div>
+        ) : (
+          <table className="tms-table">
+            <thead>
+              <tr>
+                <th>{t("Container No (col)")}</th>
+                <th>{t("Booking No (col)")}</th>
+                <th>{t("Vessel (col)")}</th>
+                <th>{t("Carrier")}</th>
+                <th>{t("Cnt Type")}</th>
+                <th>{t("Customer")}</th>
+                <th>POL → POD</th>
+                <th>ETD</th>
+                <th>{t("Note")}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map(c => (
+                <tr key={c.id} onClick={() => setSelectedId(c.id)} style={{ cursor: "pointer" }}>
+                  <td style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--shell-primary)" }}>{c.container_no || "—"}</td>
+                  <td style={{ fontFamily: "monospace" }}>{c.booking_no || "—"}</td>
+                  <td>{c.vessel || "—"}</td>
+                  <td>{c.carrier || "—"}</td>
+                  <td>{typeMap[c.type_id] ? <span className="badge info">{typeMap[c.type_id]}</span> : "—"}</td>
+                  <td>{c.customer || "—"}</td>
+                  <td>{c.pol && c.pod ? `${c.pol} → ${c.pod}` : "—"}</td>
+                  <td style={{ fontFamily: "monospace" }}>{c.etd || "—"}</td>
+                  <td className="muted" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.notes || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {showNew && <NewContainerModal types={types} onClose={() => setShowNew(false)} onSave={handleCreate} />}
-    </div>
+      {showNew && <NewContainerModal types={types} onClose={() => setShowNew(false)} onSave={() => { setShowNew(false); load(); }} />}
+    </>
   );
 }
 
-// =========================================================================
-// EditField — 必须在 ContainerDetail 之外定义，否则每次 setState 会重建
-// 组件引用，React 卸载/重挂 input，导致打字时光标失焦
-// =========================================================================
+// ============================================================
+// 详情：可编辑字段
+// 在外部定义，避免父组件 setState 导致重建 / input 失焦
+// ============================================================
 function EditField({ label, field, type, options, editing, ed, setEd, container }) {
-  if (!editing) return <Field label={label} value={container[field]} />;
-  if (options) return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-      <select value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box" }}>
-        <option value="">—</option>{options.map(o => <option key={typeof o === "object" ? o.id : o} value={typeof o === "object" ? o.id : o}>{typeof o === "object" ? o.name : o}</option>)}
-      </select>
-    </div>
-  );
+  const value = container[field];
+  if (!editing) {
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: 13, color: value ? "var(--shell-text)" : "var(--shell-text-3)" }}>{value || "—"}</div>
+      </div>
+    );
+  }
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-      <input type={type || "text"} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
+    <div className="field" style={{ marginBottom: 8 }}>
+      <label className="field-label">{label}</label>
+      {options ? (
+        <select className="field-select" value={ed(field)} onChange={e => setEd(field, e.target.value)}>
+          <option value="">—</option>
+          {options.map(o => (
+            <option key={typeof o === "object" ? o.id : o} value={typeof o === "object" ? o.id : o}>
+              {typeof o === "object" ? o.name : o}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input className="field-input" type={type || "text"} value={ed(field)} onChange={e => setEd(field, e.target.value)} />
+      )}
     </div>
   );
 }
 
-// =========================================================================
-// Container Detail
-// =========================================================================
+// ============================================================
+// 柜子详情
+// ============================================================
+const LOADING_COL_DEFAULTS = { supplier: 110, po: 90, customer_po: 80, tuc: 140, sku: 90, qty: 60, weight: 70, volume: 60, hbl: 80, del: 30 };
+const LOADING_COL_KEY = "loading-items-col-widths";
+
 function ContainerDetail({ container, types, typeMap, role, user, onBack, onReload }) {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -139,8 +155,35 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   const [showAddItem, setShowAddItem] = useState(false);
   const canEdit = role === "admin" || role === "operator" || role === "sales";
 
+  const [colW, setColW] = useState(() => {
+    try { return { ...LOADING_COL_DEFAULTS, ...JSON.parse(localStorage.getItem(LOADING_COL_KEY) || "{}") }; }
+    catch { return LOADING_COL_DEFAULTS; }
+  });
+  const startColResize = (field) => (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = colW[field];
+    const onMove = (ev) => {
+      const w = Math.max(40, startW + (ev.clientX - startX));
+      setColW(prev => ({ ...prev, [field]: w }));
+    };
+    const onUp = (ev) => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      const w = Math.max(40, startW + (ev.clientX - startX));
+      setColW(prev => {
+        const next = { ...prev, [field]: w };
+        try { localStorage.setItem(LOADING_COL_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   const loadItems = useCallback(async () => {
-    const { data } = await supabase.from("container_items").select("*").eq("container_id", container.id).order("sort_order").order("created_at");
+    const { data } = await supabase.from("container_items").select("*").eq("container_id", container.id)
+      .order("sort_order").order("created_at");
     setItems(data || []);
     setLoadingItems(false);
   }, [container.id]);
@@ -166,7 +209,7 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   const setEd = (f, v) => setEditData(p => ({ ...p, [f]: v }));
 
   const handleDeleteItem = async (itemId) => {
-    if (!confirm("Delete this loading item?")) return;
+    if (!confirm("删除此装柜明细？")) return;
     await supabase.from("container_items").delete().eq("id", itemId);
     loadItems();
   };
@@ -181,7 +224,6 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   const updateItemLocal = (itemId, field, value) => {
     setItems(prev => prev.map(it => it.id === itemId ? { ...it, [field]: value } : it));
   };
-
   const saveItemCell = async (itemId, field, value) => {
     const numFields = ["qty", "weight", "volume"];
     const v = numFields.includes(field) ? (value === "" || value == null ? null : Number(value)) : (value === "" ? null : value);
@@ -189,13 +231,16 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   };
 
   const addEmptyRow = async () => {
-    const row = { container_id: container.id, supplier: "", po: "", customer_po: "", tuc: "", sku: "", qty: null, weight: null, volume: null, hbl: "", notes: "", sort_order: items.length };
+    const row = {
+      container_id: container.id,
+      supplier: "", po: "", customer_po: "", tuc: "", sku: "",
+      qty: null, weight: null, volume: null, hbl: "", notes: "", sort_order: items.length,
+    };
     const { error } = await supabase.from("container_items").insert(row);
     if (error) alert(error.message);
     loadItems();
   };
 
-  // Summary by supplier
   const supplierSummary = useMemo(() => {
     const map = {};
     for (const it of items) {
@@ -213,49 +258,57 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
   const totalWeight = items.reduce((s, i) => s + (Number(i.weight) || 0), 0);
   const totalVolume = items.reduce((s, i) => s + (Number(i.volume) || 0), 0);
 
-  // Auto-detect type
   const supplierCount = Object.keys(supplierSummary).length;
   const poCount = new Set(items.map(i => i.po).filter(Boolean)).size;
   const autoType = supplierCount > 1 || poCount > 1 ? "Console Box" : "FCL";
 
   return (
-    <div>
-      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 0", border: "none", background: "none", color: "#0ea5e9", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>← {t("Back")}</button>
+    <>
+      <button className="btn" onClick={onBack} style={{ marginBottom: 12 }}>← 返回</button>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, fontFamily: "'DM Mono',monospace" }}>{container.container_no || container.booking_no || "New Container"}</h1>
-          <p style={{ fontSize: 13, color: "#64748b", margin: "3px 0 0" }}>
+          <h1 className="page-title" style={{ margin: 0, fontFamily: "monospace" }}>
+            {container.container_no || container.booking_no || "新柜子"}
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--shell-text-2)", margin: "3px 0 0" }}>
             {container.vessel || ""} {container.etd ? `· ETD ${container.etd}` : ""}
-            {typeMap[container.type_id] && <Badge value={typeMap[container.type_id]} small style={{ marginLeft: 8 }} />}
-            <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8" }}>({autoType})</span>
+            {typeMap[container.type_id] && (
+              <span className="badge info" style={{ marginLeft: 8 }}>{typeMap[container.type_id]}</span>
+            )}
+            <span style={{ marginLeft: 8, fontSize: 11, color: "var(--shell-text-3)" }}>({autoType})</span>
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {canEdit && !editing && <Button small onClick={startEdit}>✎ {t("Edit")}</Button>}
-          {editing && <><Button small onClick={saveEdit}>✓ {t("Save")}</Button><Button small variant="secondary" onClick={cancelEdit}>✕ {t("Cancel")}</Button></>}
+          {canEdit && !editing && <button className="btn" onClick={startEdit}>✎ 编辑</button>}
+          {editing && (
+            <>
+              <button className="btn primary" onClick={saveEdit}>✓ 保存</button>
+              <button className="btn" onClick={cancelEdit}>✕ 取消</button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Container info */}
+      {/* 柜子三栏信息 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
-        <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #0ea5e9" : "1px solid #e2e8f0" }}>
-          <SectionHeader icon="📦" title={t("Container Info")} accent="#0ea5e9" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Container No")} field="container_no" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("QTY (Container)")} field="qty_container" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Seal No")} field="seal_no" />
+        <div className="page-card" style={editing ? { borderColor: "var(--shell-primary)" } : undefined}>
+          <div className="card-title">📦 {t("Container Info")}</div>
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Container No (col)")} field="container_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Container Qty (label)")} field="qty_container" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Seal No (label)")} field="seal_no" />
           <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Type")} field="type_id" options={types} />
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #6366f1" : "1px solid #e2e8f0" }}>
-          <SectionHeader icon="🚢" title={t("Shipping Details")} accent="#6366f1" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Booking No")} field="booking_no" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("E-Booking No")} field="e_booking_no" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Vessel")} field="vessel" />
-          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Carrier")} field="carrier" />
+        <div className="page-card" style={editing ? { borderColor: "#6366f1" } : undefined}>
+          <div className="card-title">🚢 {t("Shipping Info Card")}</div>
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Booking No (col)")} field="booking_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("E-Booking")} field="e_booking_no" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Vessel Name")} field="vessel" />
+          <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Carrier Co")} field="carrier" />
           <EditField editing={editing} ed={ed} setEd={setEd} container={container} label={t("Agent")} field="carrier_agent" />
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
-          <SectionHeader icon="🗺" title={t("Route & Dates")} accent="#10b981" />
+        <div className="page-card" style={editing ? { borderColor: "#10b981" } : undefined}>
+          <div className="card-title">🗺 {t("Route & Dates Card")}</div>
           <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="POL" field="pol" />
           <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="POD" field="pod" />
           <EditField editing={editing} ed={ed} setEd={setEd} container={container} label="ETD" field="etd" type="date" />
@@ -264,106 +317,156 @@ function ContainerDetail({ container, types, typeMap, role, user, onBack, onRelo
         </div>
       </div>
 
-      {/* Notes */}
-      <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-        <SectionHeader icon="📝" title={t("Notes")} accent="#f59e0b" />
-        {editing
-          ? <textarea value={ed("notes")} onChange={e => setEd("notes", e.target.value)} rows={3} placeholder={t("备注（短出/剩余空间等）")} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }} />
-          : <p style={{ fontSize: 12, color: container.notes ? "#0f172a" : "#94a3b8", margin: 0, whiteSpace: "pre-wrap" }}>{container.notes || "—"}</p>
-        }
+      <div className="page-card">
+        <div className="card-title">📝 {t("Note")}</div>
+        {editing ? (
+          <textarea className="field-textarea" value={ed("notes")} onChange={e => setEd("notes", e.target.value)}
+                    rows={3} placeholder="备注（短出/剩余空间等）" />
+        ) : (
+          <p style={{ fontSize: 13, color: container.notes ? "var(--shell-text)" : "var(--shell-text-3)", margin: 0, whiteSpace: "pre-wrap" }}>
+            {container.notes || "—"}
+          </p>
+        )}
       </div>
 
-      {/* Loading items */}
-      <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #f59e0b", marginBottom: 14 }}>
-        <SectionHeader icon="📋" title={t("Loading Items")} accent="#f59e0b"
-          right={canEdit && <Button small variant="accent" onClick={() => setShowAddItem(true)}>+ {t("Add Item")}</Button>} />
+      {/* 装柜明细 */}
+      <div className="page-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid var(--shell-border-2)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>📋 装柜明细</div>
+          {canEdit && <button className="btn primary" onClick={() => setShowAddItem(true)}>+ 添加明细</button>}
+        </div>
 
-        {loadingItems ? <Spinner /> : items.length === 0
-          ? <p style={{ fontSize: 12, color: "#94a3b8", margin: "8px 0 0" }}>{t("暂无装柜明细")}</p>
-          : (
-            <div style={{ overflowX: "auto", marginTop: 8 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead><tr style={{ background: "#fffbeb" }}>
-                  {[t("Supplier"), "PO", "Customer PO", t("TUC"), "SKU", "QTY (CTNS)", t("Weight"), "CBM", "HBL", ""].map(h =>
-                    <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#92400e", fontSize: 10, borderBottom: "2px solid #fde68a", whiteSpace: "nowrap" }}>{h}</th>
-                  )}
-                </tr></thead>
-                <tbody>
-                  {items.map((it) => {
-                    const cs = { padding: "3px 2px" };
-                    const is_ = { width: "100%", padding: "4px 6px", border: "1px solid #fde68a", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace", background: canEdit ? "#fffbeb" : "transparent" };
-                    const cell = (field, w, opts) => {
-                      const type = opts?.type || "text";
-                      const step = opts?.step;
-                      return <td style={cs}><input style={{ ...is_, width: w, ...(opts?.align ? { textAlign: opts.align } : {}) }} type={type} step={step} value={it[field] ?? ""} readOnly={!canEdit} onChange={e => updateItemLocal(it.id, field, e.target.value)} onBlur={e => saveItemCell(it.id, field, e.target.value)} /></td>;
-                    };
-                    return (
-                      <tr key={it.id} style={{ borderBottom: "1px solid #fef3c7" }}>
-                        {cell("supplier", 90)}
-                        {cell("po", 90)}
-                        {cell("customer_po", 80)}
-                        {cell("tuc", 140)}
-                        {cell("sku", 90)}
-                        {cell("qty", 60, { type: "number", align: "right" })}
-                        {cell("weight", 65, { type: "number", step: "0.0001", align: "right" })}
-                        {cell("volume", 60, { type: "number", step: "0.0001", align: "right" })}
-                        {cell("hbl", 80)}
-                        <td style={cs}>
-                          {canEdit && <button onClick={() => handleDeleteItem(it.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {items.length > 0 && (
-                    <tr style={{ background: "#fffbeb", fontWeight: 700 }}>
-                      <td colSpan={5} style={{ padding: "8px 4px", textAlign: "right", fontSize: 11, color: "#92400e" }}>{t("Total")}</td>
-                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalQty}</td>
-                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalWeight.toFixed(4)}</td>
-                      <td style={{ padding: "8px 4px", textAlign: "right", fontSize: 11 }}>{totalVolume.toFixed(4)}</td>
-                      <td colSpan={2} />
+        {loadingItems ? (
+          <div className="empty-state empty-text">加载中...</div>
+        ) : items.length === 0 ? (
+          <p style={{ fontSize: 12, color: "var(--shell-text-3)", margin: "8px 0 0" }}>暂无装柜明细</p>
+        ) : (
+          <div style={{ overflowX: "auto", marginTop: 8 }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed", width: "auto" }}>
+              <colgroup>
+                {["supplier","po","customer_po","tuc","sku","qty","weight","volume","hbl","del"].map(k =>
+                  <col key={k} style={{ width: colW[k] }} />
+                )}
+              </colgroup>
+              <thead>
+                <tr style={{ background: "#fafbfc" }}>
+                  {[
+                    { k: "supplier", label: "供应商" },
+                    { k: "po", label: "PO" },
+                    { k: "customer_po", label: "Customer PO" },
+                    { k: "tuc", label: "TUC" },
+                    { k: "sku", label: "SKU" },
+                    { k: "qty", label: "QTY" },
+                    { k: "weight", label: "毛重 KGS" },
+                    { k: "volume", label: "CBM" },
+                    { k: "hbl", label: "HBL" },
+                    { k: "del", label: "" },
+                  ].map((c, i, arr) => (
+                    <th key={c.k} style={{
+                      padding: "6px 6px", textAlign: "left", fontWeight: 500,
+                      color: "var(--shell-text-2)", fontSize: 11,
+                      borderBottom: "1px solid var(--shell-border)",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      position: "relative", userSelect: "none",
+                    }}>
+                      {c.label}
+                      {i < arr.length - 1 && (
+                        <div onMouseDown={startColResize(c.k)} title="拖拽改变列宽"
+                             style={{ position: "absolute", top: 0, right: -3, width: 6, height: "100%", cursor: "col-resize", zIndex: 1 }} />
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(it => {
+                  const inputStyle = {
+                    width: "100%", padding: "4px 6px",
+                    border: "1px solid transparent", borderRadius: 3,
+                    fontSize: 12, outline: "none", boxSizing: "border-box",
+                    background: canEdit ? "transparent" : "transparent",
+                    fontFamily: "inherit",
+                  };
+                  const cell = (field, opts) => (
+                    <td style={{ padding: "2px 2px" }}>
+                      <input style={{ ...inputStyle, ...(opts?.align ? { textAlign: opts.align } : {}) }}
+                             type={opts?.type || "text"} step={opts?.step}
+                             value={it[field] ?? ""} readOnly={!canEdit}
+                             onChange={e => updateItemLocal(it.id, field, e.target.value)}
+                             onBlur={e => saveItemCell(it.id, field, e.target.value)}
+                             onFocus={e => canEdit && (e.target.style.border = "1px solid var(--shell-primary)")}
+                             onBlurCapture={e => (e.target.style.border = "1px solid transparent")} />
+                    </td>
+                  );
+                  return (
+                    <tr key={it.id} style={{ borderBottom: "1px solid var(--shell-border-2)" }}>
+                      {cell("supplier")}
+                      {cell("po")}
+                      {cell("customer_po")}
+                      {cell("tuc")}
+                      {cell("sku")}
+                      {cell("qty", { type: "number", align: "right" })}
+                      {cell("weight", { type: "number", step: "0.0001", align: "right" })}
+                      {cell("volume", { type: "number", step: "0.0001", align: "right" })}
+                      {cell("hbl")}
+                      <td style={{ padding: "2px 2px", textAlign: "center" }}>
+                        {canEdit && (
+                          <button onClick={() => handleDeleteItem(it.id)}
+                                  style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                        )}
+                      </td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )
-        }
-
-        {/* Quick add buttons */}
-        {canEdit && (
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <Button small variant="secondary" onClick={addEmptyRow}>+ {t("新增行")}</Button>
-            <Button small variant="accent" onClick={() => setShowAddItem(true)}>+ {t("从货件选择")}</Button>
+                  );
+                })}
+                {items.length > 0 && (
+                  <tr style={{ background: "#fafbfc", fontWeight: 600 }}>
+                    <td colSpan={5} style={{ padding: "8px 6px", textAlign: "right", fontSize: 12 }}>合计</td>
+                    <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 12 }}>{totalQty}</td>
+                    <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 12 }}>{totalWeight.toFixed(4)}</td>
+                    <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 12 }}>{totalVolume.toFixed(4)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {/* Summary */}
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button className="btn" onClick={addEmptyRow}>+ 新增行</button>
+            <button className="btn primary" onClick={() => setShowAddItem(true)}>+ 从货件选择</button>
+          </div>
+        )}
+
         {items.length > 0 && (
-          <div style={{ marginTop: 12, padding: 10, background: "#fffbeb", borderRadius: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>{t("Summary")}</div>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 11 }}>
+          <div style={{ marginTop: 12, padding: 10, background: "var(--shell-bg)", borderRadius: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--shell-text)", marginBottom: 6 }}>按供应商汇总</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11 }}>
               {Object.entries(supplierSummary).map(([s, d]) => (
-                <div key={s} style={{ background: "#fff", borderRadius: 6, padding: "6px 10px", border: "1px solid #fde68a" }}>
-                  <span style={{ fontWeight: 600, color: "#0f172a" }}>{tSupplier(s)}</span>
-                  <span style={{ color: "#64748b", marginLeft: 8 }}>{d.count} items · {d.qty} CTNS · {d.weight.toFixed(4)} kg · {d.volume.toFixed(4)} m³</span>
+                <div key={s} style={{ background: "#fff", borderRadius: 4, padding: "6px 10px", border: "1px solid var(--shell-border)" }}>
+                  <span style={{ fontWeight: 600 }}>{tSupplier(s)}</span>
+                  <span style={{ color: "var(--shell-text-2)", marginLeft: 8 }}>
+                    {d.count} 行 · {d.qty} CTNS · {d.weight.toFixed(4)} kg · {d.volume.toFixed(4)} m³
+                  </span>
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: "#0f172a" }}>
-              {t("Total")}: {totalQty} CTNS · {totalWeight.toFixed(4)} kg · {totalVolume.toFixed(4)} m³
+            <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600 }}>
+              合计：{totalQty} CTNS · {totalWeight.toFixed(4)} kg · {totalVolume.toFixed(4)} m³
             </div>
           </div>
         )}
       </div>
 
       {showAddItem && <AddItemModal onClose={() => setShowAddItem(false)} onSave={handleAddItem} />}
-    </div>
+    </>
   );
 }
 
-// =========================================================================
-// New Container Modal — container_no/seal_no per line, auto-grouping
-// =========================================================================
+// ============================================================
+// 新建柜子（含货件搜索 + 自动分组）
+// ============================================================
 function NewContainerModal({ types, onClose, onSave }) {
   const [shipments, setShipments] = useState([]);
   const [poSearch, setPoSearch] = useState("");
@@ -408,32 +511,29 @@ function NewContainerModal({ types, onClose, onSave }) {
     setLines(prev => [...prev, {
       container_no: "", seal_no: "",
       supplier: s.supplier || "", po: s.po || "", customer_po: s.customer_po || "",
-      tuc: s.tuc || "", sku: s.sku || "", hs_code: "", qty: s.qty_packages || "",
-      packing_unit: "CTNS", weight: s.weight || "", volume: s.volume || "",
+      tuc: s.tuc || "", sku: s.sku || "", hs_code: "",
+      qty: s.qty_packages || "", packing_unit: "CTNS",
+      weight: s.weight || "", volume: s.volume || "",
       hbl: "", shipment_id: s.id, _src: s,
     }]);
     setPoSearch("");
     setError("");
   };
-
   const addEmptyLine = () => {
     setLines(prev => [...prev, { container_no: "", seal_no: "", supplier: "", po: "", customer_po: "", tuc: "", sku: "", hs_code: "", qty: "", packing_unit: "CTNS", weight: "", volume: "", hbl: "", _src: {} }]);
   };
-
   const updateLine = (idx, field, value) => {
     setLines(prev => prev.map((ln, i) => i === idx ? { ...ln, [field]: value } : ln));
     setError("");
   };
-
   const removeLine = (idx) => {
     setLines(prev => prev.filter((_, i) => i !== idx));
     setError("");
   };
 
-  // Validate container_no + seal_no consistency
   const validation = useMemo(() => {
-    const pairs = new Map(); // container_no -> seal_no
-    const sealToCtr = new Map(); // seal_no -> container_no
+    const pairs = new Map();
+    const sealToCtr = new Map();
     for (const ln of lines) {
       const cno = (ln.container_no || "").trim();
       const sno = (ln.seal_no || "").trim();
@@ -445,7 +545,6 @@ function NewContainerModal({ types, onClose, onSave }) {
         sealToCtr.set(sno, cno);
       }
     }
-    // Group by container_no
     const groups = {};
     for (const ln of lines) {
       const key = (ln.container_no || "").trim() || "__no_ctr__";
@@ -457,11 +556,10 @@ function NewContainerModal({ types, onClose, onSave }) {
   }, [lines]);
 
   const submit = async () => {
-    if (lines.length === 0) { alert(t("请至少添加一行装柜明细")); return; }
+    if (lines.length === 0) { alert("请至少添加一行装柜明细"); return; }
     if (!validation.ok) { setError(validation.msg); return; }
     setSaving(true);
 
-    // Group lines by container_no (or all in one if no container_no specified)
     const groups = {};
     for (const ln of lines) {
       const key = (ln.container_no || "").trim() || "__default__";
@@ -470,14 +568,13 @@ function NewContainerModal({ types, onClose, onSave }) {
       if (ln.seal_no?.trim() && !groups[key].seal_no) groups[key].seal_no = ln.seal_no.trim();
     }
 
-    // Auto-detect type
     const supplierCount = new Set(lines.map(l => l.supplier).filter(Boolean)).size;
     const poCount = new Set(lines.map(l => l.po).filter(Boolean)).size;
     const isConsole = supplierCount > 1 || poCount > 1;
     const consoleTid = types.find(t => t.name === "Console Box")?.id;
     const fclTid = types.find(t => t.name === "FCL")?.id;
 
-    for (const [key, grp] of Object.entries(groups)) {
+    for (const [, grp] of Object.entries(groups)) {
       const cData = {
         container_no: grp.container_no, seal_no: grp.seal_no,
         type_id: isConsole ? consoleTid : fclTid, notes: notes || null,
@@ -494,41 +591,61 @@ function NewContainerModal({ types, onClose, onSave }) {
       if (!cData.eta) delete cData.eta;
 
       const { data: created, error: cErr } = await supabase.from("containers").insert(cData).select("id").single();
-      if (cErr || !created) { alert("Container error: " + (cErr?.message || "Failed")); setSaving(false); return; }
+      if (cErr || !created) { alert("柜子写入失败：" + (cErr?.message || "Failed")); setSaving(false); return; }
 
-      const items = grp.items.map((ln, i) => ({
+      const itms = grp.items.map((ln, i) => ({
         container_id: created.id, shipment_id: ln.shipment_id || null,
         supplier: ln.supplier || null, po: ln.po || null, customer_po: ln.customer_po || null,
         tuc: ln.tuc || null, sku: ln.sku || null,
         qty: ln.qty ? Number(ln.qty) : null, weight: ln.weight ? Number(ln.weight) : null,
         volume: ln.volume ? Number(ln.volume) : null, hbl: ln.hbl || null, sort_order: i,
       }));
-      await supabase.from("container_items").insert(items);
+      await supabase.from("container_items").insert(itms);
     }
     setSaving(false);
     onSave();
   };
 
-  const totals = lines.reduce((t, ln) => ({ qty: t.qty + (Number(ln.qty) || 0), wt: t.wt + (Number(ln.weight) || 0), vol: t.vol + (Number(ln.volume) || 0) }), { qty: 0, wt: 0, vol: 0 });
+  const totals = lines.reduce((t, ln) => ({
+    qty: t.qty + (Number(ln.qty) || 0),
+    wt: t.wt + (Number(ln.weight) || 0),
+    vol: t.vol + (Number(ln.volume) || 0),
+  }), { qty: 0, wt: 0, vol: 0 });
 
-  const is_ = { padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" };
+  const inputStyle = { padding: "4px 6px", border: "1px solid var(--shell-border)", borderRadius: 3, fontSize: 11, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 
   return (
-    <Modal onClose={onClose} title={t("New Container")} width={1200}>
+    <Modal title="新建柜子" onClose={onClose} width={1200} footer={
+      <>
+        <button className="btn" onClick={onClose}>取消</button>
+        <button className="btn primary" onClick={submit} disabled={saving || lines.length === 0 || !validation.ok}>
+          {saving ? "保存中..." : `保存（${validation.containerCount || 1} 个柜）`}
+        </button>
+      </>
+    }>
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 6 }}>1. {t("添加装柜明细")} — {t("搜索 PO / Customer PO / 品名...")}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>1. 添加装柜明细 — 搜索 PO / Customer PO / 品名</div>
         <div style={{ position: "relative" }}>
-          <input value={poSearch} onChange={e => setPoSearch(e.target.value)} placeholder={t("输入 PO 或 Customer PO 搜索...")}
-            style={{ width: "100%", padding: "8px 12px", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, outline: "none", background: "#f0f9ff", boxSizing: "border-box" }} />
+          <input className="field-input" value={poSearch} onChange={e => setPoSearch(e.target.value)}
+                 placeholder="输入 PO 或 Customer PO 搜索..." />
           {poFiltered.length > 0 && (
-            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, marginTop: 2,
+              background: "#fff", border: "1px solid var(--shell-border)", borderRadius: 4,
+              maxHeight: 240, overflowY: "auto", zIndex: 10,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            }}>
               {poFiltered.map(s => (
-                <div key={s.id} onClick={() => addFromShipment(s)} style={{ padding: "6px 12px", cursor: "pointer", fontSize: 11, borderBottom: "1px solid #f1f5f9", display: "flex", gap: 12 }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#f0f9ff"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <span style={{ fontWeight: 600, color: "#0369a1", fontFamily: "'DM Mono',monospace", minWidth: 100 }}>{s.po}</span>
-                  <span style={{ fontFamily: "'DM Mono',monospace", minWidth: 80, color: "#64748b" }}>{s.customer_po}</span>
-                  <span style={{ color: "#0f172a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tuc || "—"}</span>
-                  <span style={{ color: "#94a3b8" }}>{tSupplier(s.supplier) || ""}</span>
+                <div key={s.id} onClick={() => addFromShipment(s)} style={{
+                  padding: "6px 12px", cursor: "pointer", fontSize: 12,
+                  borderBottom: "1px solid var(--shell-border-2)", display: "flex", gap: 12,
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--shell-primary-50)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <span style={{ fontWeight: 600, color: "var(--shell-primary)", fontFamily: "monospace", minWidth: 100 }}>{s.po}</span>
+                  <span style={{ fontFamily: "monospace", minWidth: 80, color: "var(--shell-text-2)" }}>{s.customer_po}</span>
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tuc || "—"}</span>
+                  <span style={{ color: "var(--shell-text-3)" }}>{tSupplier(s.supplier) || ""}</span>
                 </div>
               ))}
             </div>
@@ -539,30 +656,34 @@ function NewContainerModal({ types, onClose, onSave }) {
       {lines.length > 0 && (
         <div style={{ overflowX: "auto", marginBottom: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-            <thead><tr style={{ background: "#f0f9ff" }}>
-              {[t("柜号"), t("封号"), t("Supplier"), "PO", "Cust PO", t("TUC"), "HS Code", "QTY (CTNS)", t("Weight"), "CBM", "HBL", ""].map(h =>
-                <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: "#0369a1", fontSize: 10, borderBottom: "2px solid #bae6fd", whiteSpace: "nowrap" }}>{h}</th>
-              )}
-            </tr></thead>
+            <thead>
+              <tr style={{ background: "#fafbfc" }}>
+                {["柜号","封号","供应商","PO","Cust PO","TUC","HS Code","QTY","毛重","CBM","HBL",""].map(h =>
+                  <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 500, color: "var(--shell-text-2)", fontSize: 10, borderBottom: "1px solid var(--shell-border)", whiteSpace: "nowrap" }}>{h}</th>
+                )}
+              </tr>
+            </thead>
             <tbody>
               {lines.map((ln, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 85, background: "#fffbeb", border: "1px solid #fde68a" }} value={ln.container_no} onChange={e => updateLine(i, "container_no", e.target.value)} placeholder="CNTR" /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70, background: "#fffbeb", border: "1px solid #fde68a" }} value={ln.seal_no} onChange={e => updateLine(i, "seal_no", e.target.value)} placeholder="Seal" /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 85 }} value={ln.supplier} onChange={e => updateLine(i, "supplier", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 90, fontWeight: 600, color: "#0369a1" }} value={ln.po} onChange={e => updateLine(i, "po", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70 }} value={ln.customer_po} onChange={e => updateLine(i, "customer_po", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 120 }} value={ln.tuc} onChange={e => updateLine(i, "tuc", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70 }} value={ln.hs_code || ""} onChange={e => updateLine(i, "hs_code", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" value={ln.qty} onChange={e => updateLine(i, "qty", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 60, textAlign: "right" }} type="number" step="0.0001" value={ln.weight} onChange={e => updateLine(i, "weight", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 55, textAlign: "right" }} type="number" step="0.0001" value={ln.volume} onChange={e => updateLine(i, "volume", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><input style={{ ...is_, width: 70 }} value={ln.hbl || ""} onChange={e => updateLine(i, "hbl", e.target.value)} /></td>
-                  <td style={{ padding: "3px 2px" }}><button onClick={() => removeLine(i)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button></td>
+                <tr key={i} style={{ borderBottom: "1px solid var(--shell-border-2)" }}>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 85, background: "#fffbeb" }} value={ln.container_no} onChange={e => updateLine(i, "container_no", e.target.value)} placeholder="CNTR" /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 70, background: "#fffbeb" }} value={ln.seal_no} onChange={e => updateLine(i, "seal_no", e.target.value)} placeholder="Seal" /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 85 }} value={ln.supplier} onChange={e => updateLine(i, "supplier", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 90, fontWeight: 600, color: "var(--shell-primary)" }} value={ln.po} onChange={e => updateLine(i, "po", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 70 }} value={ln.customer_po} onChange={e => updateLine(i, "customer_po", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 120 }} value={ln.tuc} onChange={e => updateLine(i, "tuc", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 70 }} value={ln.hs_code || ""} onChange={e => updateLine(i, "hs_code", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 55, textAlign: "right" }} type="number" value={ln.qty} onChange={e => updateLine(i, "qty", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 60, textAlign: "right" }} type="number" step="0.0001" value={ln.weight} onChange={e => updateLine(i, "weight", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 55, textAlign: "right" }} type="number" step="0.0001" value={ln.volume} onChange={e => updateLine(i, "volume", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}><input style={{ ...inputStyle, width: 70 }} value={ln.hbl || ""} onChange={e => updateLine(i, "hbl", e.target.value)} /></td>
+                  <td style={{ padding: "2px 2px" }}>
+                    <button onClick={() => removeLine(i)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                  </td>
                 </tr>
               ))}
-              <tr style={{ background: "#f0f9ff", fontWeight: 700 }}>
-                <td colSpan={7} style={{ padding: "6px 4px", textAlign: "right", fontSize: 11, color: "#0369a1" }}>{t("Total")}</td>
+              <tr style={{ background: "#fafbfc", fontWeight: 600 }}>
+                <td colSpan={7} style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>合计</td>
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.qty}</td>
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.wt.toFixed(4)}</td>
                 <td style={{ padding: "6px 4px", textAlign: "right", fontSize: 11 }}>{totals.vol.toFixed(4)}</td>
@@ -571,63 +692,61 @@ function NewContainerModal({ types, onClose, onSave }) {
             </tbody>
           </table>
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-            <Button small variant="secondary" onClick={addEmptyLine}>+ {t("手动添加行")}</Button>
+            <button className="btn" onClick={addEmptyLine}>+ 手动添加行</button>
           </div>
         </div>
       )}
 
-      {/* Validation error */}
       {(error || !validation.ok) && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+        <div style={{
+          background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 4,
+          padding: 10, marginBottom: 12, fontSize: 12, color: "#dc2626", fontWeight: 500,
+        }}>
           ⚠ {error || validation.msg}
         </div>
       )}
 
-      {/* Container summary info */}
       {lines.length > 0 && validation.ok && (
-        <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, border: "1px solid #e2e8f0", marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", marginBottom: 8 }}>
-            2. {t("柜子信息")} — {validation.containerCount || 1} {t("个柜")}
+        <div style={{ background: "var(--shell-bg)", borderRadius: 4, padding: 12, border: "1px solid var(--shell-border-2)", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+            2. 柜子信息 — {validation.containerCount || 1} 个柜
             {validation.containerCount > 1
               ? <span style={{ color: "#f59e0b", marginLeft: 8 }}>Console Box</span>
               : <span style={{ color: "#10b981", marginLeft: 8 }}>FCL</span>}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-            <Field label="Booking" value={derived.booking_no || "—"} />
-            <Field label="Vessel" value={derived.vessel || "—"} />
-            <Field label="Carrier" value={derived.carrier || "—"} />
-            <Field label="Agent" value={derived.carrier_agent || "—"} />
-            <Field label="POL" value={derived.pol || "—"} />
-            <Field label="POD" value={derived.pod || "—"} />
-            <Field label="ETD" value={derived.etd || "—"} />
-            <Field label="Customer" value={derived.customer || "—"} />
+            <InfoLine label="Booking" value={derived.booking_no} />
+            <InfoLine label="Vessel" value={derived.vessel} />
+            <InfoLine label="Carrier" value={derived.carrier} />
+            <InfoLine label="Agent" value={derived.carrier_agent} />
+            <InfoLine label="POL" value={derived.pol} />
+            <InfoLine label="POD" value={derived.pod} />
+            <InfoLine label="ETD" value={derived.etd} />
+            <InfoLine label="Customer" value={derived.customer} />
           </div>
           <div style={{ marginTop: 8 }}>
-            <Input label={t("Notes")} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("备注（短出/剩余空间等）")} />
+            <div className="field-label">备注</div>
+            <input className="field-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="备注（短出/剩余空间等）" />
           </div>
         </div>
       )}
-
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
-        <Button onClick={submit} disabled={saving || lines.length === 0 || !validation.ok}>{saving ? "..." : `${t("Save")} (${validation.containerCount || 1} ${t("个柜")})`}</Button>
-      </div>
     </Modal>
   );
 }
 
-// =========================================================================
-// Add Item Modal
-// =========================================================================
+// ============================================================
+// 添加装柜明细 Modal
+// ============================================================
 function AddItemModal({ onClose, onSave }) {
-  const [mode, setMode] = useState("select"); // "select" or "manual"
+  const [mode, setMode] = useState("select"); // select | manual
   const [shipments, setShipments] = useState([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ supplier: "", po: "", customer_po: "", tuc: "", sku: "", qty: "", weight: "", volume: "", hbl: "", notes: "" });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   useEffect(() => {
-    supabase.from("shipments").select("id,po,customer_po,tuc,sku,supplier,qty_packages,weight,volume").order("created_at", { ascending: false }).then(({ data }) => setShipments(data || []));
+    supabase.from("shipments").select("id,po,customer_po,tuc,sku,supplier,qty_packages,weight,volume")
+      .order("created_at", { ascending: false }).then(({ data }) => setShipments(data || []));
   }, []);
 
   const filtered = shipments.filter(s => {
@@ -637,7 +756,11 @@ function AddItemModal({ onClose, onSave }) {
   });
 
   const selectShipment = (s) => {
-    setForm({ supplier: s.supplier || "", po: s.po || "", customer_po: s.customer_po || "", tuc: s.tuc || "", sku: s.sku || "", qty: s.qty_packages || "", weight: s.weight || "", volume: s.volume || "", hbl: "", notes: "", shipment_id: s.id });
+    setForm({
+      supplier: s.supplier || "", po: s.po || "", customer_po: s.customer_po || "",
+      tuc: s.tuc || "", sku: s.sku || "", qty: s.qty_packages || "",
+      weight: s.weight || "", volume: s.volume || "", hbl: "", notes: "", shipment_id: s.id,
+    });
     setMode("manual");
   };
 
@@ -650,31 +773,51 @@ function AddItemModal({ onClose, onSave }) {
   };
 
   return (
-    <Modal onClose={onClose} title={t("Add Loading Item")} width={700}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => setMode("select")} style={{ padding: "6px 14px", borderRadius: 6, border: mode === "select" ? "2px solid #0ea5e9" : "1px solid #e2e8f0", background: mode === "select" ? "#f0f9ff" : "#fff", color: mode === "select" ? "#0369a1" : "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("从货件选择")}</button>
-        <button onClick={() => setMode("manual")} style={{ padding: "6px 14px", borderRadius: 6, border: mode === "manual" ? "2px solid #0ea5e9" : "1px solid #e2e8f0", background: mode === "manual" ? "#f0f9ff" : "#fff", color: mode === "manual" ? "#0369a1" : "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("手动输入")}</button>
+    <Modal title="添加装柜明细" onClose={onClose} width={780} footer={mode === "manual" ? (
+      <>
+        <button className="btn" onClick={onClose}>取消</button>
+        <button className="btn primary" onClick={submit}>保存</button>
+      </>
+    ) : null}>
+      <div style={{ display: "flex", gap: 0, marginBottom: 14, borderBottom: "1px solid var(--shell-border)" }}>
+        {[
+          { k: "select", l: "从货件选择" },
+          { k: "manual", l: "手动输入" },
+        ].map(o => {
+          const active = mode === o.k;
+          return (
+            <button key={o.k} onClick={() => setMode(o.k)} style={{
+              padding: "8px 18px", border: "none", background: "transparent",
+              fontSize: 13, cursor: "pointer",
+              color: active ? "var(--shell-primary)" : "var(--shell-text-2)",
+              fontWeight: active ? 600 : 400,
+              borderBottom: active ? "2px solid var(--shell-primary)" : "2px solid transparent",
+              marginBottom: -1,
+            }}>{o.l}</button>
+          );
+        })}
       </div>
 
       {mode === "select" && (
         <>
-          <Input placeholder={t("搜索 PO / Customer PO / 品名...")} value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 10 }} />
-          <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-              <thead><tr style={{ background: "#f8fafc", position: "sticky", top: 0 }}>
-                {["PO", "Customer PO", t("TUC"), t("Supplier"), "QTY"].map(h =>
-                  <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
-                )}
-              </tr></thead>
+          <input className="field-input" placeholder="搜 PO / Customer PO / 品名 / 供应商..."
+                 value={search} onChange={e => setSearch(e.target.value)}
+                 style={{ marginBottom: 10 }} />
+          <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--shell-border)", borderRadius: 4 }}>
+            <table className="tms-table">
+              <thead>
+                <tr>
+                  <th>PO</th><th>Customer PO</th><th>TUC</th><th>供应商</th><th>QTY</th>
+                </tr>
+              </thead>
               <tbody>
                 {filtered.slice(0, 50).map(s => (
-                  <tr key={s.id} onClick={() => selectShipment(s)} style={{ cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#f0f9ff"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <td style={{ padding: "6px 8px", fontFamily: "'DM Mono',monospace", fontWeight: 600, color: "#0369a1" }}>{s.po || "—"}</td>
-                    <td style={{ padding: "6px 8px", fontFamily: "'DM Mono',monospace" }}>{s.customer_po || "—"}</td>
-                    <td style={{ padding: "6px 8px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tuc || "—"}</td>
-                    <td style={{ padding: "6px 8px" }}>{tSupplier(s.supplier) || "—"}</td>
-                    <td style={{ padding: "6px 8px" }}>{s.qty_packages || "—"}</td>
+                  <tr key={s.id} onClick={() => selectShipment(s)} style={{ cursor: "pointer" }}>
+                    <td style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--shell-primary)" }}>{s.po || "—"}</td>
+                    <td style={{ fontFamily: "monospace" }}>{s.customer_po || "—"}</td>
+                    <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tuc || "—"}</td>
+                    <td>{tSupplier(s.supplier) || "—"}</td>
+                    <td>{s.qty_packages || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -684,25 +827,64 @@ function AddItemModal({ onClose, onSave }) {
       )}
 
       {mode === "manual" && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Input label={t("Supplier")} value={form.supplier} onChange={e => set("supplier", e.target.value)} />
-            <Input label="PO" value={form.po} onChange={e => set("po", e.target.value)} />
-            <Input label="Customer PO" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} />
-            <Input label={t("TUC")} value={form.tuc} onChange={e => set("tuc", e.target.value)} />
-            <Input label="SKU" value={form.sku} onChange={e => set("sku", e.target.value)} />
-            <Input label="QTY" type="number" value={form.qty} onChange={e => set("qty", e.target.value)} />
-            <Input label={t("Weight (kg)")} type="number" value={form.weight} onChange={e => set("weight", e.target.value)} />
-            <Input label="CBM" type="number" value={form.volume} onChange={e => set("volume", e.target.value)} />
-            <Input label="HBL" value={form.hbl} onChange={e => set("hbl", e.target.value)} />
-            <Input label={t("Notes")} value={form.notes} onChange={e => set("notes", e.target.value)} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-            <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>
-            <Button onClick={submit}>{t("Save")}</Button>
-          </div>
-        </>
+        <div className="field-row">
+          <Field label="供应商"><input className="field-input" value={form.supplier} onChange={e => set("supplier", e.target.value)} /></Field>
+          <Field label="PO"><input className="field-input" value={form.po} onChange={e => set("po", e.target.value)} /></Field>
+          <Field label="Customer PO"><input className="field-input" value={form.customer_po} onChange={e => set("customer_po", e.target.value)} /></Field>
+          <Field label="TUC"><input className="field-input" value={form.tuc} onChange={e => set("tuc", e.target.value)} /></Field>
+          <Field label="SKU"><input className="field-input" value={form.sku} onChange={e => set("sku", e.target.value)} /></Field>
+          <Field label="QTY"><input className="field-input" type="number" value={form.qty} onChange={e => set("qty", e.target.value)} /></Field>
+          <Field label="毛重 (kg)"><input className="field-input" type="number" value={form.weight} onChange={e => set("weight", e.target.value)} /></Field>
+          <Field label="CBM"><input className="field-input" type="number" value={form.volume} onChange={e => set("volume", e.target.value)} /></Field>
+          <Field label="HBL"><input className="field-input" value={form.hbl} onChange={e => set("hbl", e.target.value)} /></Field>
+          <Field label="备注"><input className="field-input" value={form.notes} onChange={e => set("notes", e.target.value)} /></Field>
+        </div>
       )}
     </Modal>
+  );
+}
+
+// ============================================================
+// 公用：Modal / Field / InfoLine
+// ============================================================
+function Modal({ title, children, footer, onClose, width = 560 }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.35)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width, maxWidth: "95vw", maxHeight: "90vh", overflow: "auto",
+        background: "#fff", borderRadius: 6, boxShadow: "0 10px 30px rgba(0,0,0,.2)",
+      }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--shell-border)", fontSize: 14, fontWeight: 600 }}>
+          {title}
+        </div>
+        <div style={{ padding: 16 }}>{children}</div>
+        {footer && (
+          <div style={{ padding: "10px 16px", borderTop: "1px solid var(--shell-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, req, children }) {
+  return (
+    <div className="field">
+      <label className="field-label">{label}{req && <span className="req">*</span>}</label>
+      {children}
+    </div>
+  );
+}
+
+function InfoLine({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, color: value ? "var(--shell-text)" : "var(--shell-text-3)" }}>{value || "—"}</div>
+    </div>
   );
 }

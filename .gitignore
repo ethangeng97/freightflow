@@ -3,3 +3,11 @@ dist
 .DS_Store
 *.log
 .vite
+
+# 本次新增/敏感
+.mcp.json
+.screenshots/
+supabase/.temp/
+.vercel/
+.env.local
+

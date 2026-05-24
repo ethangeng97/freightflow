@@ -1,6 +1,7 @@
+// Knowledge page — entity browser with notes
+// Refactored to use new shell.css primitives for visual consistency.
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../supabase.js";
-import { Input, Spinner, EmptyState, Tag, SectionHeader } from "../components/ui.jsx";
 import { NotesPanel } from "../components/NotesPanel.jsx";
 import { t, tSupplier } from "../lib/i18n.js";
 
@@ -11,26 +12,26 @@ export function KnowledgePage({ user, defaultTab, supplierOnly }) {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [allNotes, setAllNotes] = useState([]);
+  const [newName, setNewName] = useState("");
 
-  const tableMap = { customer: "customers", supplier: "suppliers", shipment: "shipments", endcustomer: "end_customers" };
+  const tableMap   = { customer: "customers", supplier: "suppliers", shipment: "shipments", endcustomer: "end_customers" };
   const labelField = { customer: "name", supplier: "name", shipment: "po", endcustomer: "name" };
   const descField  = { customer: "contact_name", supplier: "name_cn", shipment: "tuc", endcustomer: null };
 
-  const [newName, setNewName] = useState("");
   const addEndCustomer = async () => {
     const name = newName.trim();
     if (!name) return;
     const { error } = await supabase.from("end_customers").insert({ name });
     if (error) { alert(error.message); return; }
-    setNewName("");
-    loadEntities();
+    setNewName(""); loadEntities();
   };
 
   const loadEntities = useCallback(async () => {
     setLoading(true);
     const tb = tableMap[entityType];
     const cols = entityType === "shipment" ? "id,po,tuc,customer" : "*";
-    const { data } = await supabase.from(tb).select(cols).order(entityType === "shipment" ? "created_at" : "name", { ascending: entityType !== "shipment" });
+    const { data } = await supabase.from(tb).select(cols)
+      .order(entityType === "shipment" ? "created_at" : "name", { ascending: entityType !== "shipment" });
     setEntities(data || []); setLoading(false);
     const { data: notes } = await supabase.from("notes").select("entity_id,id,pinned").eq("entity_type", entityType);
     setAllNotes(notes || []);
@@ -53,64 +54,145 @@ export function KnowledgePage({ user, defaultTab, supplierOnly }) {
     );
   }, [entities, search, entityType]);
 
-  return (
-    <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{supplierOnly ? t("Suppliers") : t("Knowledge")}</h1>
-      <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 16px" }}>{supplierOnly ? t("委托方列表") : t("Notes attached to customers, suppliers, and shipments")}</p>
+  const tabs = supplierOnly ? [] : [
+    { k: "customer",    l: t("Customers") },
+    { k: "supplier",    l: t("Suppliers") },
+    { k: "endcustomer", l: t("End Customers") },
+    { k: "shipment",    l: t("Shipments") },
+  ];
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-        {!supplierOnly && (
-          <div style={{ display: "flex", border: "1px solid #e2e8f0", borderRadius: 7, overflow: "hidden" }}>
-            {[{ k: "customer", l: t("Customers") }, { k: "supplier", l: t("Suppliers") }, { k: "endcustomer", l: t("End Customers") }, { k: "shipment", l: t("Shipments") }].map((tb) => (
-              <button key={tb.k} onClick={() => setEntityType(tb.k)} style={{
-                padding: "7px 16px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: entityType === tb.k ? "#0ea5e9" : "#fff", color: entityType === tb.k ? "#fff" : "#64748b",
-              }}>{tb.l}</button>
-            ))}
-          </div>
-        )}
-        <Input placeholder={t("Search...")} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
+  return (
+    <>
+      <h1 className="page-title">{t("Knowledge")}</h1>
+
+      {/* 实体类型 tabs（更像真 tab，下划线高亮） */}
+      {!supplierOnly && (
+        <div style={{
+          display: "flex", gap: 0, marginBottom: 12,
+          borderBottom: "1px solid var(--shell-border)",
+        }}>
+          {tabs.map(tb => {
+            const active = entityType === tb.k;
+            return (
+              <button
+                key={tb.k}
+                onClick={() => setEntityType(tb.k)}
+                style={{
+                  padding: "8px 18px", border: "none", background: "transparent",
+                  fontSize: 13, cursor: "pointer",
+                  color: active ? "var(--shell-primary)" : "var(--shell-text-2)",
+                  fontWeight: active ? 600 : 400,
+                  borderBottom: active ? "2px solid var(--shell-primary)" : "2px solid transparent",
+                  marginBottom: -1,
+                }}
+              >
+                {tb.l}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 搜索/操作工具栏 */}
+      <div className="page-section-bar">
+        <input
+          className="field-input"
+          placeholder={t("Search...")}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ width: 240 }}
+        />
         {entityType === "endcustomer" && !supplierOnly && (
           <>
-            <Input placeholder={t("新 End Customer 名称")} value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addEndCustomer(); }} style={{ width: 220 }} />
-            <button onClick={addEndCustomer} disabled={!newName.trim()} style={{ padding: "6px 14px", border: "none", borderRadius: 6, background: newName.trim() ? "#0ea5e9" : "#cbd5e1", color: "#fff", fontSize: 12, fontWeight: 600, cursor: newName.trim() ? "pointer" : "not-allowed" }}>+ {t("新增")}</button>
+            <input
+              className="field-input"
+              placeholder={t("New end-customer name")}
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addEndCustomer(); }}
+              style={{ width: 220 }}
+            />
+            <button className="btn primary" onClick={addEndCustomer} disabled={!newName.trim()}>
+              + {t("Add")}
+            </button>
           </>
         )}
+        <div style={{ flex: 1 }} />
+        <span style={{ color: "var(--shell-text-3)", fontSize: 12 }}>
+          {filtered.length} {t("items")}
+        </span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 14 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: 10, maxHeight: "70vh", overflowY: "auto" }}>
-          {loading ? <Spinner /> : filtered.length === 0 ? <EmptyState>{t("No items found")}</EmptyState> :
-            filtered.map((e) => {
-              const id = e.id;
-              const count = noteCounts[id] || 0;
-              const rawLabel = e[labelField[entityType]] || "(no name)";
-              const label = entityType === "supplier" ? (tSupplier(rawLabel) || rawLabel) : rawLabel;
-              const desc = entityType === "supplier" ? (e.name_cn ? e.name : null) : e[descField[entityType]];
-              const isSel = selected?.id === id;
-              return (
-                <button key={id} onClick={() => setSelected({ id, label, desc })} style={{
-                  width: "100%", textAlign: "left", padding: "8px 10px", border: "none", borderRadius: 6, cursor: "pointer",
-                  marginBottom: 4, fontSize: 12.5, background: isSel ? "#f0f9ff" : "transparent",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontWeight: isSel ? 600 : 500, color: isSel ? "#0369a1" : "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-                    {count > 0 && <Tag color="#0ea5e9">{count}</Tag>}
-                  </div>
-                  {desc && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{desc}</div>}
-                </button>
-              );
-            })}
+      {/* 左右分栏 */}
+      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 14 }}>
+        <div className="page-card" style={{ padding: 0, maxHeight: "70vh", overflowY: "auto" }}>
+          {loading ? (
+            <div className="empty-state empty-text" style={{ padding: "30px 0" }}>{t("Loading...")}</div>
+          ) : filtered.length === 0 ? (
+            <div className="empty-state empty-text" style={{ padding: "30px 0" }}>{t("No items found")}</div>
+          ) : filtered.map((e, idx) => {
+            const id = e.id;
+            const count = noteCounts[id] || 0;
+            const rawLabel = e[labelField[entityType]] || "(no name)";
+            const label = entityType === "supplier" ? (tSupplier(rawLabel) || rawLabel) : rawLabel;
+            const desc = entityType === "supplier" ? (e.name_cn ? e.name : null) : e[descField[entityType]];
+            const isSel = selected?.id === id;
+            return (
+              <div
+                key={id}
+                onClick={() => setSelected({ id, label, desc })}
+                style={{
+                  padding: "8px 12px",
+                  cursor: "pointer", fontSize: 13,
+                  background: isSel ? "var(--shell-primary-50)" : "transparent",
+                  color: isSel ? "var(--shell-primary)" : "var(--shell-text)",
+                  fontWeight: isSel ? 500 : 400,
+                  borderLeft: isSel ? "3px solid var(--shell-primary)" : "3px solid transparent",
+                  borderBottom: idx < filtered.length - 1 ? "1px solid var(--shell-border-2)" : "none",
+                }}
+                onMouseEnter={e2 => { if (!isSel) e2.currentTarget.style.background = "var(--shell-bg)"; }}
+                onMouseLeave={e2 => { if (!isSel) e2.currentTarget.style.background = "transparent"; }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                  {count > 0 && <span className="badge info" style={{ flexShrink: 0 }}>{count}</span>}
+                </div>
+                {desc && (
+                  <div style={{
+                    fontSize: 11, color: "var(--shell-text-3)", marginTop: 2,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{desc}</div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: 14 }}>
-          {!selected ? <EmptyState>{supplierOnly ? t("选择一个委托方查看详情") : t("Select an item to view notes")}</EmptyState> : (
+
+        <div className="page-card">
+          {!selected ? (
+            <div className="empty-state empty-text" style={{ padding: "60px 0" }}>
+              {supplierOnly ? t("Select a customer to view details") : t("Select an item to view notes")}
+            </div>
+          ) : (
             <>
-              <SectionHeader icon="📝" title={selected.label} accent="#0ea5e9" />
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                paddingBottom: 10, marginBottom: 14, borderBottom: "1px solid var(--shell-border-2)",
+              }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 2 }}>
+                    {tabs.find(x => x.k === entityType)?.l || entityType}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "var(--shell-text)" }}>
+                    {selected.label}
+                  </div>
+                </div>
+              </div>
               <NotesPanel entityType={entityType} entityId={selected.id} user={user} />
             </>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

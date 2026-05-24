@@ -133,7 +133,20 @@ function createClient() {
     return builder;
   };
 
-  return { auth, from, api };
+  // Call a PostgREST RPC (SQL function). Returns {data, error} like .from().
+  const rpc = async (name, args = {}) => {
+    try {
+      const data = await api(`/rest/v1/rpc/${name}`, {
+        method: "POST",
+        body: JSON.stringify(args || {}),
+      });
+      return { data, error: null };
+    } catch (err) {
+      return { data: null, error: err };
+    }
+  };
+
+  return { auth, from, api, rpc };
 }
 
 export const supabase = createClient();

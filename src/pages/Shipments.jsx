@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "../supabase.js";
-import { Badge, Field, SectionHeader, FilterDropdown, Modal, Button, Input, Select, Spinner, EmptyState, Tag } from "../components/ui.jsx";
+import { Badge, Field, SectionHeader, FilterDropdown, Modal, Button, Input, Select, Combobox, Spinner, EmptyState, Tag } from "../components/ui.jsx";
 import { ColumnManager } from "../components/ColumnManager.jsx";
 import { NotesPanel } from "../components/NotesPanel.jsx";
 import { STATUS_CONFIGS, FIELD_LABELS } from "../lib/constants.js";
@@ -245,23 +245,24 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
           refData={refData} />
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 14 }}>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{t("Shipments")}</h1>
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: "3px 0 0" }}>
-                {filtered.length} of {shipments.length} records
-                {activeFilterCount > 0 && <span style={{ color: "#0ea5e9", fontWeight: 600 }}> · {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active</span>}
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <Button variant="secondary" onClick={() => setShowColMgr(true)}>⚙ {t("Columns")}</Button>
-              {(role === "admin" || role === "customer") &&
-                <Button variant="secondary" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ {t("Export CSV")}</Button>}
-              {(role === "admin" || role === "operator" || role === "sales") &&
-                <Button variant="secondary" onClick={() => setShowImport(true)}>↑ {t("Import")}</Button>}
-              {(role === "admin" || role === "operator" || role === "sales") &&
-                <Button onClick={() => setShowNew(true)}>+ {t("New Shipment")}</Button>}
-            </div>
+          <h1 className="page-title">{t("Orders")}</h1>
+
+          <div className="page-section-bar">
+            <input className="field-input" placeholder={t("Search PO / Customer / Supplier / Vessel...")}
+                   value={search} onChange={e => setSearch(e.target.value)}
+                   style={{ width: 240 }} />
+            <div style={{ flex: 1 }} />
+            <span style={{ color: "var(--shell-text-3)", fontSize: 12 }}>
+              {filtered.length} / {shipments.length} {t("records")}
+              {activeFilterCount > 0 && <span style={{ color: "var(--shell-primary)", marginLeft: 8 }}>· {activeFilterCount} {t("filter(s)")}</span>}
+            </span>
+            <button className="btn" onClick={() => setShowColMgr(true)}>⚙ {t("Columns")}</button>
+            {(role === "admin" || role === "customer") &&
+              <button className="btn" onClick={() => exportToCSV(filtered, role, visibleCols)}>↓ {t("Export CSV")}</button>}
+            {(role === "admin" || role === "operator" || role === "sales") &&
+              <button className="btn" onClick={() => setShowImport(true)}>↑ {t("Import")}</button>}
+            {(role === "admin" || role === "operator" || role === "sales") &&
+              <button className="btn primary" onClick={() => setShowNew(true)}>+ {t("New Shipment")}</button>}
           </div>
 
           <FilterBar
@@ -304,20 +305,24 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
             onOpen={setSelectedId}
           />
 
-          {/* Pagination */}
+          {/* 分页 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, fontSize: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ color: "#64748b" }}>{t("每页")}</span>
-              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none", cursor: "pointer" }}>
+              <span style={{ color: "var(--shell-text-2)" }}>每页</span>
+              <select className="field-select" value={pageSize}
+                      onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }}
+                      style={{ width: 70 }}>
                 {[20, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
-              <span style={{ color: "#94a3b8" }}>{filtered.length} {t("条")} · {t("第")} {page + 1}/{totalPages} {t("页")}</span>
+              <span style={{ color: "var(--shell-text-3)" }}>
+                {filtered.length} 条 · 第 {page + 1}/{totalPages} 页
+              </span>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
-              <button disabled={page === 0} onClick={() => setPage(0)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page === 0 ? "default" : "pointer", color: page === 0 ? "#cbd5e1" : "#0f172a" }}>⟨⟨</button>
-              <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page === 0 ? "default" : "pointer", color: page === 0 ? "#cbd5e1" : "#0f172a" }}>⟨</button>
-              <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page >= totalPages - 1 ? "default" : "pointer", color: page >= totalPages - 1 ? "#cbd5e1" : "#0f172a" }}>⟩</button>
-              <button disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: page >= totalPages - 1 ? "default" : "pointer", color: page >= totalPages - 1 ? "#cbd5e1" : "#0f172a" }}>⟩⟩</button>
+              <button className="btn" disabled={page === 0} onClick={() => setPage(0)}>⟨⟨</button>
+              <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>⟨</button>
+              <button className="btn" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>⟩</button>
+              <button className="btn" disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>⟩⟩</button>
             </div>
           </div>
         </>
@@ -340,35 +345,42 @@ export function ShipmentsPage({ user, view, setView, statFilter }) {
 // =========================================================================
 // Filter Bar
 // =========================================================================
-function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, setTextFilters, overseasAgentList, carrierList, activeFilterCount, clearFilters }) {
+function FilterBar({ role, filters, setFilters, textFilters, setTextFilters, overseasAgentList, carrierList, activeFilterCount, clearFilters }) {
   const masked = maskedFields(role);
   return (
-    <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "12px 14px", marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Filters</span>
-        <input placeholder="Search PO#, product, SKU..." value={search} onChange={e => setSearch(e.target.value)}
-          style={{ padding: "6px 10px", borderRadius: 6, border: search ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 180, outline: "none", background: search ? "#f0f9ff" : "#fff" }} />
+    <div className="page-card" style={{ marginBottom: 14, padding: "10px 12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, color: "var(--shell-text-2)", marginRight: 4 }}>{t("Filters")}</span>
         {Object.entries(STATUS_CONFIGS).map(([key, cfg]) =>
-          <FilterDropdown key={key} label={t(cfg.label)} value={filters[key]} options={[...cfg.options, "__empty__"]} optionLabels={{ "__empty__": t("未设置") }} onChange={v => setFilters(p => ({ ...p, [key]: v }))} />
+          <FilterDropdown key={key} label={t(cfg.label)} value={filters[key]} options={[...cfg.options, "__empty__"]} optionLabels={{ "__empty__": t("Not set") }} onChange={v => setFilters(p => ({ ...p, [key]: v }))} />
         )}
         {!masked.has("entry_done") &&
           <FilterDropdown label={t("Entry")} value={filters.entry_done} options={["已录入", "未录入"]} onChange={v => setFilters(p => ({ ...p, entry_done: v }))} />}
         {!masked.has("overseas_agent") &&
-          <FilterDropdown label="Customer" value={filters.overseas_agent} options={overseasAgentList} onChange={v => setFilters(p => ({ ...p, overseas_agent: v }))} />}
-        <FilterDropdown label="Carrier" value={filters.carrier} options={carrierList} onChange={v => setFilters(p => ({ ...p, carrier: v }))} />
+          <FilterDropdown label={t("Customer")} value={filters.overseas_agent} options={overseasAgentList} onChange={v => setFilters(p => ({ ...p, overseas_agent: v }))} />}
+        <FilterDropdown label={t("Carrier")} value={filters.carrier} options={carrierList} onChange={v => setFilters(p => ({ ...p, carrier: v }))} />
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
         {[
-          { k: "booking_no",   p: "Booking No..." },
-          { k: "container_no", p: "Container No..." },
-          { k: "vessel",       p: "Vessel..." },
-          ...(masked.has("end_customer") ? [] : [{ k: "end_customer", p: "End Customer..." }]),
-          { k: "supplier",     p: "Supplier..." },
+          { k: "booking_no",   p: t("Booking No") + "..." },
+          { k: "container_no", p: t("Container No") + "..." },
+          { k: "vessel",       p: t("Vessel") + "..." },
+          ...(masked.has("end_customer") ? [] : [{ k: "end_customer", p: t("End Customer") + "..." }]),
+          { k: "supplier",     p: t("Supplier") + "..." },
         ].map(f =>
-          <input key={f.k} placeholder={f.p} value={textFilters[f.k]} onChange={e => setTextFilters(p => ({ ...p, [f.k]: e.target.value }))}
-            style={{ padding: "6px 10px", borderRadius: 6, border: textFilters[f.k] ? "2px solid #0ea5e9" : "1px solid #e2e8f0", fontSize: 12, width: 130, outline: "none", background: textFilters[f.k] ? "#f0f9ff" : "#fff" }} />
+          <input key={f.k} className="field-input" placeholder={f.p}
+                 value={textFilters[f.k]} onChange={e => setTextFilters(p => ({ ...p, [f.k]: e.target.value }))}
+                 style={{
+                   width: 130,
+                   borderColor: textFilters[f.k] ? "var(--shell-primary)" : undefined,
+                   background: textFilters[f.k] ? "var(--shell-primary-50)" : undefined,
+                 }} />
         )}
-        {activeFilterCount > 0 && <button onClick={clearFilters} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #fee2e2", background: "#fef2f2", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✕ Clear all</button>}
+        {activeFilterCount > 0 && (
+          <button className="btn danger" onClick={clearFilters} style={{ padding: "5px 10px", fontSize: 12 }}>
+            ✕ {t("Clear filters")}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -380,27 +392,38 @@ function FilterBar({ role, search, setSearch, filters, setFilters, textFilters, 
 function ShipmentTable({ rows, columns, role, checkedIds, onToggleCheck, onToggleCheckAll, onOpen }) {
   const showCheckbox = role === "admin";
   return (
-    <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ background: "#f8fafc" }}>
-          {showCheckbox && (
-            <th style={{ padding: "10px 4px 10px 10px", borderBottom: "1px solid #e2e8f0", width: 32 }}>
-              <input type="checkbox" checked={rows.length > 0 && checkedIds.size === rows.length} onChange={onToggleCheckAll} style={{ cursor: "pointer", width: 15, height: 15 }} />
-            </th>
-          )}
-          {columns.map(c => (
-            <th key={c.key} style={{ padding: "10px 7px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 10.5, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap", minWidth: c.width || 100 }}>{t(c.label)}</th>
-          ))}
-        </tr></thead>
+    <div className="page-card" style={{ padding: 0, overflow: "auto" }}>
+      <table className="tms-table">
+        <thead>
+          <tr>
+            {showCheckbox && (
+              <th style={{ width: 32 }}>
+                <input type="checkbox"
+                       checked={rows.length > 0 && checkedIds.size === rows.length}
+                       onChange={onToggleCheckAll}
+                       style={{ cursor: "pointer", width: 14, height: 14 }} />
+              </th>
+            )}
+            {columns.map(c => (
+              <th key={c.key} style={{ whiteSpace: "nowrap", minWidth: c.width || 100 }}>{t(c.label)}</th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
-          {rows.length === 0 && <tr><td colSpan={columns.length + (showCheckbox ? 1 : 0)} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>{t("No shipments found")}</td></tr>}
-          {rows.map((o, i) => (
-            <tr key={o.id} style={{ cursor: "pointer", borderBottom: i < rows.length - 1 ? "1px solid #f1f5f9" : "none", background: checkedIds.has(o.id) ? "#f0f9ff" : "transparent" }}
-              onMouseEnter={e => { if (!checkedIds.has(o.id)) e.currentTarget.style.background = "#f8fafc"; }}
-              onMouseLeave={e => { if (!checkedIds.has(o.id)) e.currentTarget.style.background = "transparent"; }}>
+          {rows.length === 0 && (
+            <tr><td colSpan={columns.length + (showCheckbox ? 1 : 0)} style={{ padding: 40, textAlign: "center", color: "var(--shell-text-3)" }}>
+              暂无订单
+            </td></tr>
+          )}
+          {rows.map(o => (
+            <tr key={o.id} style={{
+              cursor: "pointer",
+              background: checkedIds.has(o.id) ? "var(--shell-primary-50)" : undefined,
+            }}>
               {showCheckbox && (
-                <td style={{ padding: "10px 4px 10px 10px" }} onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={checkedIds.has(o.id)} onChange={() => onToggleCheck(o.id)} style={{ cursor: "pointer", width: 15, height: 15 }} />
+                <td onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={checkedIds.has(o.id)} onChange={() => onToggleCheck(o.id)}
+                         style={{ cursor: "pointer", width: 14, height: 14 }} />
                 </td>
               )}
               {columns.map(c => {
@@ -408,12 +431,12 @@ function ShipmentTable({ rows, columns, role, checkedIds, onToggleCheck, onToggl
                 const display = (value === undefined || value === null || value === "") ? "—" : value;
                 return (
                   <td key={c.key} onClick={() => onOpen(o.id)} style={{
-                    padding: "10px 7px",
-                    fontSize: c.mono ? 11 : 11.5,
-                    fontFamily: c.mono ? "'DM Mono',monospace" : undefined,
-                    color: c.key === "po" ? "#0ea5e9" : "#475569",
-                    fontWeight: c.key === "po" ? 600 : 400,
-                    whiteSpace: "nowrap", maxWidth: c.width ? c.width + 30 : undefined, overflow: "hidden", textOverflow: "ellipsis",
+                    fontFamily: c.mono ? "monospace" : undefined,
+                    color: c.key === "po" ? "var(--shell-primary)" : undefined,
+                    fontWeight: c.key === "po" ? 600 : undefined,
+                    whiteSpace: "nowrap",
+                    maxWidth: c.width ? c.width + 30 : undefined,
+                    overflow: "hidden", textOverflow: "ellipsis",
                   }}>{display}</td>
                 );
               })}
@@ -459,24 +482,27 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
   const EditableField = ({ label, field, type, options, combo, displayValue }) => {
     if (!editing) return <Field label={label} value={displayValue !== undefined ? displayValue : displayOrder[field]} />;
     if (options && combo) {
-      const listId = `dl-${field}`;
       return (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-          <input type={type || "text"} list={listId} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
-          <datalist id={listId}>{options.map(o => {
-            const v = typeof o === "string" ? o : o.value;
-            return <option key={v} value={v} />;
-          })}</datalist>
+        <div className="field" style={{ marginBottom: 10 }}>
+          <label className="field-label">{label}</label>
+          <Combobox
+            value={ed(field)}
+            onChange={v => setEd(field, v)}
+            options={options}
+            recentKey={`ship-${field}`}
+            fontMono
+            inputStyle={{ padding: "7px 10px", borderRadius: 4, border: "1px solid var(--shell-border)", background: "#fff", fontSize: 13, color: "var(--shell-text)" }}
+          />
         </div>
       );
     }
     if (options) {
       return (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-          <select value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box" }}>
-            <option value="">—</option>{options.map(o => {
+        <div className="field" style={{ marginBottom: 10 }}>
+          <label className="field-label">{label}</label>
+          <select className="field-select" value={ed(field)} onChange={e => setEd(field, e.target.value)}>
+            <option value="">—</option>
+            {options.map(o => {
               const v = typeof o === "string" ? o : o.value;
               const l = typeof o === "string" ? o : o.label;
               return <option key={v} value={v}>{l}</option>;
@@ -486,42 +512,53 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
       );
     }
     return (
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-        <input type={type || "text"} value={ed(field)} onChange={e => setEd(field, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
+      <div className="field" style={{ marginBottom: 10 }}>
+        <label className="field-label">{label}</label>
+        <input className="field-input" type={type || "text"} value={ed(field)}
+               onChange={e => setEd(field, e.target.value)} />
       </div>
     );
   };
 
   return (
     <div>
-      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 0", border: "none", background: "none", color: "#0ea5e9", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>← Back</button>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <button className="btn" onClick={onBack} style={{ marginBottom: 12 }}>← 返回列表</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, fontFamily: "'DM Mono',monospace" }}>{order.po || "No PO#"}</h1>
-          <p style={{ fontSize: 13, color: "#64748b", margin: "3px 0 0" }}>{order.tuc || ""}</p>
+          <h1 className="page-title" style={{ margin: 0, fontFamily: "monospace" }}>{order.po || "无 PO#"}</h1>
+          <p style={{ fontSize: 13, color: "var(--shell-text-2)", margin: "3px 0 0" }}>{order.tuc || ""}</p>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {Object.keys(STATUS_CONFIGS).map(k => order[k] ? <Badge key={k} value={order[k]} /> : null)}
-          {canEdit && !editing && <Button small onClick={startEdit}>✎ {t("Edit")}</Button>}
-          {editing && <><Button small onClick={saveEdit}>✓ {t("Save")}</Button><Button small variant="secondary" onClick={cancelEdit}>✕ {t("Cancel")}</Button></>}
+          {canEdit && !editing && <button className="btn" onClick={startEdit}>✎ 编辑</button>}
+          {editing && (
+            <>
+              <button className="btn primary" onClick={saveEdit}>✓ 保存</button>
+              <button className="btn" onClick={cancelEdit}>✕ 取消</button>
+            </>
+          )}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         {Object.entries(STATUS_CONFIGS).map(([key, cfg]) => {
           const val = order[key];
           const editable = canEditField(role, key);
           return (
-            <div key={key} style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", border: editable ? "2px solid #0ea5e9" : "1px solid #e2e8f0", flex: "1 1 140px", minWidth: 140 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                {t(cfg.label)}{editable && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
+            <div key={key} className="page-card" style={{ padding: "10px 12px", flex: "1 1 140px", minWidth: 140, margin: 0 }}>
+              <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 6 }}>
+                {t(cfg.label)}
               </div>
-              {editable
-                ? <select value={val || ""} onChange={e => onUpdateField(order.id, key, val, e.target.value)} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", cursor: "pointer", color: "#0c4a6e", boxSizing: "border-box" }}>
-                    <option value="">—</option>{cfg.options.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                : (val ? <Badge value={val} /> : <span style={{ fontSize: 12, color: "#cbd5e1" }}>—</span>)}
+              {editable ? (
+                <select className="field-select" value={val || ""}
+                        onChange={e => onUpdateField(order.id, key, val, e.target.value)}
+                        style={{ fontSize: 12, padding: "4px 8px" }}>
+                  <option value="">—</option>
+                  {cfg.options.map(o => <option key={o} value={o}>{t(o)}</option>)}
+                </select>
+              ) : (
+                val ? <Badge value={val} /> : <span style={{ fontSize: 12, color: "var(--shell-text-3)" }}>—</span>
+              )}
             </div>
           );
         })}
@@ -529,61 +566,72 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
 
       {/* Entry status — visible to admin/operator/sales only */}
       {role !== "customer" && (
-        <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-          <div style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", border: canEditField(role, "entry_done") ? "2px solid #0ea5e9" : "1px solid #e2e8f0", flex: "1 1 140px", minWidth: 140 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-              {t("Entry Status")}{canEditField(role, "entry_done") && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
-            </div>
-            {canEditField(role, "entry_done")
-              ? <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#0c4a6e" }}>
-                  <input type="checkbox" checked={!!order.entry_done} onChange={e => onUpdateField(order.id, "entry_done", order.entry_done, e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
-                  {order.entry_done ? t("已录单") : t("未录单")}
-                </label>
-              : (order.entry_done ? <span style={{ color: "#16a34a", fontWeight: 600, fontSize: 12 }}>✓</span> : <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>)
-            }
+        <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+          <div className="page-card" style={{ padding: "10px 12px", flex: "1 1 140px", minWidth: 140, margin: 0 }}>
+            <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 6 }}>{t("Entry Status")}</div>
+            {canEditField(role, "entry_done") ? (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
+                <input type="checkbox" checked={!!order.entry_done}
+                       onChange={e => onUpdateField(order.id, "entry_done", order.entry_done, e.target.checked)}
+                       style={{ width: 14, height: 14, cursor: "pointer" }} />
+                {order.entry_done ? t("已录单") : t("未录单")}
+              </label>
+            ) : (
+              order.entry_done
+                ? <span style={{ color: "#16a34a", fontWeight: 600, fontSize: 13 }}>✓ {t("已录单")}</span>
+                : <span style={{ color: "var(--shell-text-3)", fontSize: 13 }}>—</span>
+            )}
           </div>
           {order.entry_done && (
-            <div style={{ background: "#fff", borderRadius: 8, padding: "10px 14px", border: canEditField(role, "entry_number") ? "2px solid #0ea5e9" : "1px solid #e2e8f0", flex: "2 1 200px", minWidth: 200 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#8896a7", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                {t("Entry Number")}{canEditField(role, "entry_number") && <span style={{ fontSize: 9, color: "#0ea5e9", fontWeight: 700 }}>EDITABLE</span>}
-              </div>
-              {canEditField(role, "entry_number")
-                ? <input type="text" value={order.entry_number || ""} onChange={e => onUpdateField(order.id, "entry_number", order.entry_number, e.target.value)} placeholder={t("系统编号")} style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #bae6fd", background: "#f0f9ff", fontSize: 12, fontWeight: 600, outline: "none", color: "#0c4a6e", boxSizing: "border-box", fontFamily: "'DM Mono',monospace" }} />
-                : <span style={{ fontSize: 12, fontWeight: 600, fontFamily: "'DM Mono',monospace" }}>{order.entry_number || "—"}</span>
-              }
+            <div className="page-card" style={{ padding: "10px 12px", flex: "2 1 200px", minWidth: 200, margin: 0 }}>
+              <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 6 }}>{t("Entry Number")}</div>
+              {canEditField(role, "entry_number") ? (
+                <input className="field-input" type="text" value={order.entry_number || ""}
+                       onChange={e => onUpdateField(order.id, "entry_number", order.entry_number, e.target.value)}
+                       placeholder={t("系统编号")}
+                       style={{ fontSize: 12, padding: "4px 8px", fontFamily: "monospace" }} />
+              ) : (
+                <span style={{ fontSize: 13, fontFamily: "monospace" }}>{order.entry_number || "—"}</span>
+              )}
             </div>
           )}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #e2e8f0", marginBottom: 16 }}>
-        {[{ k: "overview", l: t("Overview") }, ...(role === "customer" ? [] : [{ k: "history", l: "History" }]), { k: "notes", l: t("Notes") }].map(tb => (
-          <button key={tb.k} onClick={() => setTab(tb.k)} style={{
-            padding: "9px 16px", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-            color: tab === tb.k ? "#0ea5e9" : "#64748b", borderBottom: tab === tb.k ? "2px solid #0ea5e9" : "2px solid transparent", marginBottom: -1,
-          }}>{tb.l}</button>
-        ))}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--shell-border)", marginBottom: 14 }}>
+        {[{ k: "overview", l: "概览" }, ...(role === "customer" ? [] : [{ k: "history", l: "修改历史" }]), { k: "notes", l: "笔记" }].map(tb => {
+          const active = tab === tb.k;
+          return (
+            <button key={tb.k} onClick={() => setTab(tb.k)} style={{
+              padding: "8px 18px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13,
+              color: active ? "var(--shell-primary)" : "var(--shell-text-2)",
+              fontWeight: active ? 600 : 400,
+              borderBottom: active ? "2px solid var(--shell-primary)" : "2px solid transparent",
+              marginBottom: -1,
+            }}>{tb.l}</button>
+          );
+        })}
       </div>
 
       {tab === "overview" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #0ea5e9" : "1px solid #e2e8f0" }}>
-              <SectionHeader icon="📄" title={t("Order References")} accent="#0ea5e9" />
+            <div className="page-card">
+              <div className="card-title">📄 {t("Order References")}</div>
               <EditableField label={t("PO#")} field="po" />
               <EditableField label={t("Customer PO#")} field="customer_po" />
               <EditableField label={t("Supplier Order No#")} field="supplier_order_no" />
               <EditableField label={t("CRD Date")} field="crd_date" type="date" />
               <EditableField label={t("Incoterms")} field="incoterms" options={["FOB","CIF","EXW","CFR","DDP","DAP","FCA","CPT","CIP","DAT"]} />
             </div>
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #10b981" : "1px solid #e2e8f0" }}>
-              <SectionHeader icon="🏢" title={t("Parties")} accent="#10b981" />
-              <EditableField label={t("Supplier")} field="customer" options={refData?.customerShortOptions} displayValue={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
-              {!masked.has("overseas_agent") && <EditableField label={t("Customer")} field="overseas_agent" options={refData?.overseasAgents} />}
-              {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} />}
+            <div className="page-card">
+              <div className="card-title">🏢 {t("Parties")}</div>
+              <EditableField label={t("Supplier")} field="customer" options={refData?.customerShortOptions} combo displayValue={tCustomerShort(displayOrder.customer, displayOrder.supplier)} />
+              {!masked.has("overseas_agent") && <EditableField label={t("Customer")} field="overseas_agent" options={refData?.overseasAgents} combo />}
+              {!masked.has("end_customer") && <EditableField label={t("End Customer")} field="end_customer" options={refData?.endCustomers} combo />}
             </div>
-            <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #f59e0b" : "1px solid #e2e8f0" }}>
-              <SectionHeader icon="📦" title={t("Cargo Details")} accent="#f59e0b" />
+            <div className="page-card">
+              <div className="card-title">📦 {t("Cargo Details")}</div>
               <EditableField label={t("Description (TUC)")} field="tuc" />
               <EditableField label={t("SKU")} field="sku" />
               <EditableField label={t("QTY (Packages)")} field="qty_packages" />
@@ -591,14 +639,14 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
               <EditableField label={t("Volume (m³)")} field="volume" />
             </div>
           </div>
-          <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: editing ? "2px solid #6366f1" : "1px solid #e2e8f0", marginBottom: 14 }}>
-            <SectionHeader icon="🚢" title={t("Shipping Details")} accent="#6366f1" />
+          <div className="page-card">
+            <div className="card-title">🚢 {t("Shipping Details")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0 24px" }}>
               <EditableField label={t("E-Booking No")} field="e_booking_no" />
               <EditableField label={t("Booking No")} field="booking_no" />
               <EditableField label={t("POL")} field="pol" options={refData?.ports} combo />
               <EditableField label={t("POD")} field="pod" options={refData?.ports} combo />
-              <EditableField label={t("Carrier")} field="carrier" options={refData?.carriers} />
+              <EditableField label={t("Carrier")} field="carrier" options={refData?.carriers} combo />
               <EditableField label={t("Agent")} field="carrier_agent" />
               <EditableField label={t("Container No")} field="container_no" />
               <EditableField label={t("QTY (Container)")} field="qty_container" />
@@ -612,19 +660,30 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
         </>
       )}
       {tab === "history" && (
-        <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "1px solid #e2e8f0" }}>
-          <SectionHeader icon="📝" title="Edit History" accent="#8b5cf6" />
+        <div className="page-card">
+          <div className="card-title">📝 {t("修改历史")}</div>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {logs.length === 0 && <p style={{ fontSize: 12, color: "#94a3b8" }}>No edits yet.</p>}
+            {logs.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--shell-text-3)" }}>{t("暂无记录")}</p>
+            )}
             {logs.map((log, i) => (
-              <div key={log.id || i} style={{ padding: "9px 0", borderBottom: i < logs.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+              <div key={log.id || i} style={{
+                padding: "8px 0",
+                borderBottom: i < logs.length - 1 ? "1px solid var(--shell-border-2)" : "none",
+              }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "#0ea5e9" }}>{log.user_email}</span>
-                  <span style={{ fontSize: 10.5, color: "#cbd5e1", fontFamily: "'DM Mono',monospace" }}>{new Date(log.created_at).toLocaleString()}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--shell-primary)" }}>{log.user_email}</span>
+                  <span style={{ fontSize: 11, color: "var(--shell-text-3)", fontFamily: "monospace" }}>
+                    {new Date(log.created_at).toLocaleString()}
+                  </span>
                 </div>
-                <div style={{ fontSize: 12, color: "#475569" }}>
-                  <span style={{ fontWeight: 600 }}>{log.field_name}</span>
-                  {log.old_value && <span style={{ color: "#ef4444", textDecoration: "line-through", margin: "0 6px", fontSize: 11 }}>{log.old_value}</span>}
+                <div style={{ fontSize: 12, color: "var(--shell-text)" }}>
+                  <span style={{ fontWeight: 500 }}>{log.field_name}</span>
+                  {log.old_value && (
+                    <span style={{ color: "#ef4444", textDecoration: "line-through", margin: "0 6px", fontSize: 11 }}>
+                      {log.old_value}
+                    </span>
+                  )}
                   <span style={{ color: "#10b981", fontSize: 11 }}>→ {log.new_value}</span>
                 </div>
               </div>
@@ -632,7 +691,11 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
           </div>
         </div>
       )}
-      {tab === "notes" && <NotesPanel entityType="shipment" entityId={order.id} user={user} />}
+      {tab === "notes" && (
+        <div className="page-card">
+          <NotesPanel entityType="shipment" entityId={order.id} user={user} />
+        </div>
+      )}
     </div>
   );
 }
@@ -642,31 +705,39 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
 // =========================================================================
 function LogsView({ logs }) {
   return (
-    <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 3px" }}>Audit Log</h1>
-      <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 16px" }}>Complete edit history</p>
-      <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 600 }}>
-          <thead><tr style={{ background: "#f8fafc" }}>
-            {["Time", "User", "Field", "Change"].map(h => <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {logs.length === 0 && <tr><td colSpan={4} style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>No logs yet</td></tr>}
-            {logs.map((log, i) => (
-              <tr key={log.id || i} style={{ borderBottom: i < logs.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <td style={{ padding: "10px 14px", fontFamily: "'DM Mono',monospace", fontSize: 11.5, color: "#94a3b8", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleString()}</td>
-                <td style={{ padding: "10px 14px" }}><Tag color="#0ea5e9">{log.user_email}</Tag></td>
-                <td style={{ padding: "10px 14px", fontWeight: 500 }}>{log.field_name}</td>
-                <td style={{ padding: "10px 14px" }}>
-                  {log.old_value && <span style={{ color: "#ef4444", textDecoration: "line-through", marginRight: 8, fontSize: 11.5 }}>{log.old_value}</span>}
-                  <span style={{ color: "#059669", fontSize: 11.5 }}>→ {log.new_value}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <h1 className="page-title">操作审计</h1>
+      <div className="page-card" style={{ padding: 0 }}>
+        {logs.length === 0 ? (
+          <div className="empty-state empty-text">暂无记录</div>
+        ) : (
+          <table className="tms-table">
+            <thead>
+              <tr><th>时间</th><th>用户</th><th>字段</th><th>变更</th></tr>
+            </thead>
+            <tbody>
+              {logs.map((log, i) => (
+                <tr key={log.id || i}>
+                  <td style={{ fontFamily: "monospace", color: "var(--shell-text-3)", whiteSpace: "nowrap" }}>
+                    {new Date(log.created_at).toLocaleString()}
+                  </td>
+                  <td><span className="badge info">{log.user_email}</span></td>
+                  <td style={{ fontWeight: 500 }}>{log.field_name}</td>
+                  <td>
+                    {log.old_value && (
+                      <span style={{ color: "#ef4444", textDecoration: "line-through", marginRight: 8, fontSize: 11 }}>
+                        {log.old_value}
+                      </span>
+                    )}
+                    <span style={{ color: "#059669", fontSize: 11 }}>→ {log.new_value}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -723,8 +794,8 @@ function NewShipmentModal({ onClose, onSave, refData, role }) {
 
         <SelOrInput label="POL" field="pol" form={form} set={set} options={refData.ports} combo />
         <SelOrInput label="POD" field="pod" form={form} set={set} options={refData.ports} combo />
-        <Select label="Carrier" value={form.carrier} onChange={e => { set("carrier", e.target.value); set("carrier_agent", ""); }}
-          options={[{ value: "", label: "Select..." }, ...refData.carriers.map(c => ({ value: c, label: c }))]} />
+        <Combobox label="Carrier" value={form.carrier} onChange={v => { set("carrier", v); set("carrier_agent", ""); }}
+          options={refData.carriers} recentKey="ship-new-carrier" />
         {agentOpts.length > 0
           ? <Select label="Agent" value={form.carrier_agent} onChange={e => set("carrier_agent", e.target.value)}
               options={[{ value: "", label: "No agent" }, ...agentOpts.map(a => ({ value: a, label: a }))]} />
@@ -1095,77 +1166,83 @@ function ShipmentLoadingFromContainers({ order, role, onContainerInfo }) {
   const diffColor = (v) => v === 0 ? "#64748b" : v > 0 ? "#16a34a" : "#dc2626";
 
   return (
-    <div style={{ background: "#fff", borderRadius: 10, padding: 16, border: "2px solid #f59e0b", marginBottom: 14 }}>
-      <SectionHeader icon="📋" title={t("Loading Details")} accent="#f59e0b" />
+    <div className="page-card">
+      <div className="card-title">📋 {t("Loading Details")}</div>
 
       {items.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>
+        <div className="empty-state empty-text" style={{ padding: "20px 0" }}>
           {t("暂无装柜数据")} — {t("请在 Container 中录入装柜明细")}
         </div>
       ) : (
         <>
-          {/* Original vs Real comparison */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10, marginBottom: 14 }}>
-            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10, border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("件数")}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                <span style={{ color: "#94a3b8" }}>{t("原数据")}: {origQty}</span>
-                <span style={{ fontWeight: 700 }}>{t("实际")}: {realQty}</span>
+          {/* 原 vs 实际 对比 */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+            {[
+              { label: t("件数"), orig: origQty,    real: realQty,    diff: diffQty,    fmt: (v) => v },
+              { label: t("毛重 KGS"), orig: origWeight, real: realWeight, diff: diffWeight, fmt: (v) => v.toFixed(4) },
+              { label: "CBM",   orig: origVolume, real: realVolume, diff: diffVolume, fmt: (v) => v.toFixed(4) },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: "var(--shell-bg)", borderRadius: 4, padding: 10,
+                border: "1px solid var(--shell-border-2)",
+              }}>
+                <div style={{ fontSize: 11, color: "var(--shell-text-3)", marginBottom: 4 }}>{s.label}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                  <span style={{ color: "var(--shell-text-3)" }}>{t("原数据")}: {s.orig}</span>
+                  <span style={{ fontWeight: 600 }}>{t("实际")}: {s.fmt(s.real)}</span>
+                </div>
+                {s.orig > 0 && (
+                  <div style={{ fontSize: 11, color: diffColor(s.diff), fontWeight: 600, marginTop: 2 }}>
+                    {s.diff > 0 ? "+" : ""}{s.fmt(s.diff)}
+                  </div>
+                )}
               </div>
-              {origQty > 0 && <div style={{ fontSize: 11, color: diffColor(diffQty), fontWeight: 600, marginTop: 2 }}>{diffQty > 0 ? "+" : ""}{diffQty}</div>}
-            </div>
-            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10, border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>{t("毛重 KGS")}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                <span style={{ color: "#94a3b8" }}>{t("原数据")}: {origWeight}</span>
-                <span style={{ fontWeight: 700 }}>{t("实际")}: {realWeight.toFixed(4)}</span>
-              </div>
-              {origWeight > 0 && <div style={{ fontSize: 11, color: diffColor(diffWeight), fontWeight: 600, marginTop: 2 }}>{diffWeight > 0 ? "+" : ""}{diffWeight.toFixed(4)}</div>}
-            </div>
-            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10, border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>CBM</div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                <span style={{ color: "#94a3b8" }}>{t("原数据")}: {origVolume}</span>
-                <span style={{ fontWeight: 700 }}>{t("实际")}: {realVolume.toFixed(4)}</span>
-              </div>
-              {origVolume > 0 && <div style={{ fontSize: 11, color: diffColor(diffVolume), fontWeight: 600, marginTop: 2 }}>{diffVolume > 0 ? "+" : ""}{diffVolume.toFixed(4)}</div>}
-            </div>
+            ))}
           </div>
 
-          {/* Loading items table */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginBottom: 8 }}>
-            <thead><tr style={{ background: "#fffbeb" }}>
-              {[t("Supplier"), t("TUC"), "SKU", "QTY", t("Weight"), "CBM", "HBL", t("柜号"), t("Booking")].map(h =>
-                <th key={h} style={{ padding: "4px 4px", textAlign: "left", fontWeight: 600, color: "#92400e", fontSize: 10, borderBottom: "1px solid #fde68a" }}>{h}</th>
-              )}
-            </tr></thead>
+          {/* 装柜明细表 */}
+          <table className="tms-table" style={{ marginBottom: 8 }}>
+            <thead>
+              <tr>
+                {[t("Supplier"), t("TUC"), "SKU", "QTY", t("Weight"), "CBM", "HBL", t("柜号"), t("Booking")].map(h =>
+                  <th key={h}>{h}</th>
+                )}
+              </tr>
+            </thead>
             <tbody>
               {items.map(it => {
                 const ctr = ctrMap[it.container_id];
                 return (
-                  <tr key={it.id} style={{ borderBottom: "1px solid #fef3c7" }}>
-                    <td style={{ padding: "4px" }}>{tSupplier(it.supplier) || "—"}</td>
-                    <td style={{ padding: "4px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.tuc || "—"}</td>
-                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 9 }}>{it.sku || "—"}</td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>{it.qty || "—"}</td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>{it.weight || "—"}</td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>{it.volume || "—"}</td>
-                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 10 }}>{it.hbl || "—"}</td>
-                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 10, color: "#0369a1" }}>{ctr?.container_no || "—"}</td>
-                    <td style={{ padding: "4px", fontFamily: "'DM Mono',monospace", fontSize: 10 }}>{ctr?.booking_no || "—"}</td>
+                  <tr key={it.id}>
+                    <td>{tSupplier(it.supplier) || "—"}</td>
+                    <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.tuc || "—"}</td>
+                    <td style={{ fontFamily: "monospace" }}>{it.sku || "—"}</td>
+                    <td style={{ textAlign: "right" }}>{it.qty || "—"}</td>
+                    <td style={{ textAlign: "right" }}>{it.weight || "—"}</td>
+                    <td style={{ textAlign: "right" }}>{it.volume || "—"}</td>
+                    <td style={{ fontFamily: "monospace" }}>{it.hbl || "—"}</td>
+                    <td style={{ fontFamily: "monospace", color: "var(--shell-primary)" }}>{ctr?.container_no || "—"}</td>
+                    <td style={{ fontFamily: "monospace" }}>{ctr?.booking_no || "—"}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
 
-          {/* Containers list */}
           {containers.length > 0 && (
             <div style={{ marginTop: 8 }}>
               {containers.map(c => (
-                <div key={c.id} style={{ background: "#f0f9ff", borderRadius: 6, padding: "6px 10px", marginTop: 4, fontSize: 11, display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 600, color: "#0369a1", fontFamily: "'DM Mono',monospace" }}>🚛 {c.container_no || "—"}</span>
-                  <span style={{ color: "#64748b" }}>{c.booking_no || ""} · {c.vessel || ""} · {c.carrier || ""}</span>
+                <div key={c.id} style={{
+                  background: "var(--shell-primary-50)", borderRadius: 4,
+                  padding: "6px 10px", marginTop: 4, fontSize: 12,
+                  display: "flex", justifyContent: "space-between",
+                }}>
+                  <span style={{ fontWeight: 600, color: "var(--shell-primary)", fontFamily: "monospace" }}>
+                    🚛 {c.container_no || "—"}
+                  </span>
+                  <span style={{ color: "var(--shell-text-2)" }}>
+                    {c.booking_no || ""} · {c.vessel || ""} · {c.carrier || ""}
+                  </span>
                 </div>
               ))}
             </div>
