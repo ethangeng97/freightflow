@@ -26,6 +26,7 @@ function supplierNav() {
       ],
     },
     { key: "supplier-telex", label: t("Telex Release"), icon: "send", page: "TelexRelease" },
+    { key: "supplier-spot",  label: t("My Spot Bookings"), icon: "calendar", page: "MySpotBookings" },
   ];
 }
 
@@ -51,8 +52,9 @@ function internalNav() {
 
 function customerNav() {
   return [
-    { key: "shipments",  label: t("My Orders"),  icon: "ship", page: "Shipments" },
-    { key: "containers", label: t("Containers"), icon: "box",  page: "Containers" },
+    { key: "shipments",      label: t("My Orders"),        icon: "ship",     page: "Shipments" },
+    { key: "containers",     label: t("Containers"),       icon: "box",      page: "Containers" },
+    { key: "my-spot",        label: t("My Spot Bookings"), icon: "calendar", page: "MySpotBookings" },
   ];
 }
 

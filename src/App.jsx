@@ -24,6 +24,7 @@ import SupplierVouchers    from "./pages/supplier/Vouchers.jsx";
 import SupplierSettlements from "./pages/supplier/Settlements.jsx";
 import TelexReleasePage    from "./pages/supplier/TelexRelease.jsx";
 import SupplierOrders      from "./pages/supplier/Orders.jsx";
+import MySpotBookings      from "./pages/supplier/MySpotBookings.jsx";
 // Admin pages
 import AccountManagement   from "./pages/admin/AccountManagement.jsx";
 import ReviewBookingsPage  from "./pages/admin/ReviewBookings.jsx";
@@ -45,6 +46,7 @@ const PAGE_REGISTRY = {
   SupplierSettlements: SupplierSettlements,
   TelexRelease:        TelexReleasePage,
   SupplierOrders:      SupplierOrders,
+  MySpotBookings:      MySpotBookings,
   // Admin
   AccountManagement:   AccountManagement,
   // Internal review screens — stubs for now (next iteration)
