@@ -62,6 +62,7 @@ export function navForRole(role) {
   switch (role) {
     case "supplier": return supplierNav();
     case "customer": return customerNav();
+    case "overseas_agent": return customerNav();
     case "admin":
     case "operator":
     case "sales":

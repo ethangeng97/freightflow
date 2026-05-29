@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabase.js";
 import { t } from "../../lib/i18n.js";
+import BLOriginal from "../docs/BLOriginal.jsx";
+import ShipmentAttachments from "../../components/ShipmentAttachments.jsx";
 
 const SUPABASE_URL = "https://pewdvheoaqofmzwhwwvu.supabase.co";
 
@@ -19,7 +21,17 @@ const DOC_TYPES = [
 
 export default function OrderDetailDrawer({ shipment, customerId, user, onClose }) {
   const [tab, setTab] = useState("overview");
+  const [showOriginalBL, setShowOriginalBL] = useState(false);
   if (!shipment) return null;
+
+  // 提单正本：整页打印件，盖在抽屉之上的全屏 overlay
+  if (showOriginalBL) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 2000, background: "#f0f0f0", overflowY: "auto" }}>
+        <BLOriginal shipmentId={shipment.id} onBack={() => setShowOriginalBL(false)} />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -82,7 +94,7 @@ export default function OrderDetailDrawer({ shipment, customerId, user, onClose 
         {/* Tab 内容 */}
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           {tab === "overview"  && <OverviewTab shipment={shipment} />}
-          {tab === "documents" && <DocumentsTab shipment={shipment} customerId={customerId} user={user} />}
+          {tab === "documents" && <DocumentsTab shipment={shipment} customerId={customerId} user={user} onViewOriginalBL={() => setShowOriginalBL(true)} />}
           {tab === "progress"  && <ProgressTab shipment={shipment} />}
           {tab === "records"   && <RecordsTab shipment={shipment} />}
         </div>
@@ -118,7 +130,7 @@ function OverviewTab({ shipment: s }) {
 }
 
 // ────────────────────────────────────────
-function DocumentsTab({ shipment, customerId, user }) {
+function DocumentsTab({ shipment, customerId, user, onViewOriginalBL }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -209,6 +221,16 @@ function DocumentsTab({ shipment, customerId, user }) {
 
   return (
     <div>
+      <Section title={t("Original B/L")}>
+        <button className="btn primary" onClick={onViewOriginalBL} style={{ width: "100%" }}>
+          🖨 {t("View Original B/L")}
+        </button>
+      </Section>
+
+      <Section title={t("Document Attachments")}>
+        <ShipmentAttachments shipmentId={shipment.id} />
+      </Section>
+
       <Section title={t("Upload Document")}>
         {msg && (
           <div style={{
