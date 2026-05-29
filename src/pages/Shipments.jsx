@@ -7,6 +7,8 @@ import { STATUS_CONFIGS, FIELD_LABELS } from "../lib/constants.js";
 import { SHIPMENT_COLUMNS, COLUMN_MAP, defaultColumnConfig, reconcileColumnConfig, applyRoleMask } from "../lib/columns.jsx";
 import { isAdmin, canEditField, maskedFields } from "../lib/permissions.js";
 import { t, tSupplier, setSupplierCnMap, tCustomerShort, setCustomerShortMap } from "../lib/i18n.js";
+import BLOriginal from "./docs/BLOriginal.jsx";
+import ShipmentAttachments from "../components/ShipmentAttachments.jsx";
 
 // =========================================================================
 // Shipments Page (entry)
@@ -453,6 +455,7 @@ function ShipmentTable({ rows, columns, role, checkedIds, onToggleCheck, onToggl
 // =========================================================================
 function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refData }) {
   const [tab, setTab] = useState("overview");
+  const [showOriginalBL, setShowOriginalBL] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({});
   const [containerInfo, setContainerInfo] = useState({});
@@ -520,9 +523,18 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
     );
   };
 
+  // 提单正本：整页打印件，覆盖整个详情区
+  if (showOriginalBL) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 2000, background: "#f0f0f0", overflowY: "auto" }}>
+        <BLOriginal shipmentId={order.id} onBack={() => setShowOriginalBL(false)} />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <button className="btn" onClick={onBack} style={{ marginBottom: 12 }}>← 返回列表</button>
+      <button className="btn" onClick={onBack} style={{ marginBottom: 12 }}>← {t("Back to shipments")}</button>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 className="page-title" style={{ margin: 0, fontFamily: "monospace" }}>{order.po || "无 PO#"}</h1>
@@ -530,6 +542,7 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {Object.keys(STATUS_CONFIGS).map(k => order[k] ? <Badge key={k} value={order[k]} /> : null)}
+          {!editing && <button className="btn" onClick={() => setShowOriginalBL(true)}>🖨 {t("View Original B/L")}</button>}
           {canEdit && !editing && <button className="btn" onClick={startEdit}>✎ 编辑</button>}
           {editing && (
             <>
@@ -654,6 +667,11 @@ function ShipmentDetail({ order, logs, role, user, onBack, onUpdateField, refDat
               <EditableField label="ETD" field="etd" type="date" />
               <EditableField label="ETA" field="eta" type="date" />
             </div>
+          </div>
+          {/* 单证附件 — OPS 上传的提单正本 / 报关单等（只读，signed URL 打开） */}
+          <div className="page-card">
+            <div className="card-title">📎 {t("Document Attachments")}</div>
+            <ShipmentAttachments shipmentId={order.id} />
           </div>
           {/* Loading Data — from container_items, matched by PO */}
           <ShipmentLoadingFromContainers order={order} role={role} onContainerInfo={setContainerInfo} />
